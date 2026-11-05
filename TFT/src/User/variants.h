@@ -198,7 +198,7 @@
 #endif
 
 //ST7920 Simulator SPI pins
-#if defined(TFT24_V1_1) || defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#if defined(TFT24_V1_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define ST7920_SPI    _SPI2
 #elif defined(MKS_32_V1_4) 
   //#define ST7920_SPI    _SPI1
