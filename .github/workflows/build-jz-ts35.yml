@@ -20,6 +20,14 @@ jobs:
         run: python -m pip install platformio==6.2.0
       - name: Build STM32F207VCT6 + ILI9486L
         run: pio run -e JZ_TS35_V2_1
+      - name: Generate Intel HEX
+        shell: bash
+        run: |
+          elf="$(find .pio/build/JZ_TS35_V2_1 -maxdepth 1 -type f -name '*.elf' -print -quit)"
+          test -n "$elf"
+          objcopy="$(find "$HOME/.platformio/packages/toolchain-gccarmnoneeabi" -type f -name arm-none-eabi-objcopy -print -quit)"
+          test -x "$objcopy"
+          "$objcopy" -O ihex "$elf" "${elf%.elf}.hex"
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
