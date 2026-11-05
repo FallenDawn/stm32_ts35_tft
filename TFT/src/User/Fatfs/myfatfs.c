@@ -19,7 +19,11 @@ FATFS fatfs[FF_VOLUMES]; /* FATFS work area*/
 */
  bool mountUDisk(void)
 {
+#if defined(U_DISK_SUPPROT)
   return (f_mount(&fatfs[VOLUMES_U_DISK], "U:", 1)== FR_OK);
+#else
+  return false;
+#endif
 }
 
 /* 
