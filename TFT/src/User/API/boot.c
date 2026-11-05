@@ -1,5 +1,6 @@
 #include "boot.h"
 #include "includes.h"
+#include <stdint.h>
 
 const GUI_RECT iconUpdateRect = {(LCD_WIDTH - ICON_WIDTH)/2,              (LCD_HEIGHT - ICON_HEIGHT)/2, 
                                  (LCD_WIDTH - ICON_WIDTH)/2 + ICON_WIDTH, (LCD_HEIGHT - ICON_HEIGHT)/2 + ICON_HEIGHT};
@@ -163,6 +164,19 @@ void updateFont(char *font, u32 addr)
   u8*  tempbuf = NULL;
   
   if (f_open(&myfp, font, FA_OPEN_EXISTING|FA_READ) != FR_OK)  return;
+
+#if defined(JZ_TS35_V2_1)
+  // The original GBK/Unicode bitmap is ~4.5 MiB and cannot fit in a 4 MiB W25Q32.
+  // Do not write it at all; ASCII font data has its own safe partition.
+  if (addr == WORD_UNICODE)
+  {
+    f_close(&myfp);
+    GUI_Clear(BACKGROUND_COLOR);
+    GUI_DispString(0, 100, (u8*)"Unicode font disabled: W25Q32 is 4 MiB");
+    Delay_ms(1500);
+    return;
+  }
+#endif
 
 #if defined(W25QXX_FLASH_CAPACITY)
   // updateFont writes whole 4 KiB sectors, including the final partial sector.
