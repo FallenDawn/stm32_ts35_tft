@@ -20,8 +20,42 @@ void LCD_LED_Init(void)
 }
 #endif
 
-#if defined(TFT35_V1_2) || defined(TFT35_V2_0) || defined(TFT35_V3_0)
-//ILI9488
+#if defined(ILI9486L)
+ // ILI9486L — 320x480 panel on the 16-bit FSMC 8080 bus.
+ // Register sequence is intentionally isolated from the legacy ILI9488 path.
+ void LCD_init_RGB(void)
+ {
+   LCD_WR_REG(0xE0);
+   LCD_WR_DATA(0x00); LCD_WR_DATA(0x07); LCD_WR_DATA(0x0F);
+   LCD_WR_DATA(0x0D); LCD_WR_DATA(0x1B); LCD_WR_DATA(0x0A);
+   LCD_WR_DATA(0x3C); LCD_WR_DATA(0x78); LCD_WR_DATA(0x4A);
+   LCD_WR_DATA(0x07); LCD_WR_DATA(0x0E); LCD_WR_DATA(0x09);
+   LCD_WR_DATA(0x1B); LCD_WR_DATA(0x1E); LCD_WR_DATA(0x0F);
+
+   LCD_WR_REG(0xE1);
+   LCD_WR_DATA(0x00); LCD_WR_DATA(0x22); LCD_WR_DATA(0x24);
+   LCD_WR_DATA(0x06); LCD_WR_DATA(0x12); LCD_WR_DATA(0x07);
+   LCD_WR_DATA(0x36); LCD_WR_DATA(0x47); LCD_WR_DATA(0x47);
+   LCD_WR_DATA(0x06); LCD_WR_DATA(0x0A); LCD_WR_DATA(0x07);
+   LCD_WR_DATA(0x30); LCD_WR_DATA(0x37); LCD_WR_DATA(0x0F);
+
+   LCD_WR_REG(0xC0); LCD_WR_DATA(0x0D); LCD_WR_DATA(0x0D);
+   LCD_WR_REG(0xC1); LCD_WR_DATA(0x43);
+   LCD_WR_REG(0xC2); LCD_WR_DATA(0x00);
+   LCD_WR_REG(0xC5); LCD_WR_DATA(0x00); LCD_WR_DATA(0x48);
+   LCD_WR_REG(0xB0); LCD_WR_DATA(0x00);
+   LCD_WR_REG(0xB1); LCD_WR_DATA(0xB0);
+   LCD_WR_REG(0xB4); LCD_WR_DATA(0x02);
+   LCD_WR_REG(0xB6); LCD_WR_DATA(0x02); LCD_WR_DATA(0x02);
+   LCD_WR_REG(0xE9); LCD_WR_DATA(0x00);
+   LCD_WR_REG(0x3A); LCD_WR_DATA(0x55); // RGB565
+   LCD_WR_REG(0x36); LCD_WR_DATA(0x28); // initial landscape/BGR; verify on panel
+   LCD_WR_REG(0x11);
+   Delay_ms(120);
+   LCD_WR_REG(0x29);
+ }
+#elif defined(TFT35_V1_2) || defined(TFT35_V2_0) || defined(TFT35_V3_0)
+ //ILI9488
 void LCD_init_RGB(void) 
 {
   LCD_WR_REG(0xC0); 
@@ -518,7 +552,7 @@ void LCD_RefreshDirection(void)
     #ifdef RM68042
       LCD_WR_DATA(0X2B);
     #endif
-    #ifdef ILI9488
+    #if defined(ILI9486L) || defined(ILI9488)
       LCD_WR_DATA(0XE8);
     #endif
     #ifdef ILI9341
@@ -538,7 +572,7 @@ void LCD_RefreshDirection(void)
     #ifdef RM68042
       LCD_WR_DATA(0X28);
     #endif
-    #ifdef ILI9488
+    #if defined(ILI9486L) || defined(ILI9488)
       LCD_WR_DATA(0X28);
     #endif
     #ifdef ILI9341
