@@ -16,51 +16,71 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Install ARM GNU toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
 
-      - name: Install PlatformIO
-        run: python -m pip install platformio==6.2.0
-
-      - name: Build minimal STM32F207 diagnostic firmware
-        run: pio run -e JZ_TS35_DIAG
-
-      - name: Generate HEX, BIN and debug symbol report
+      - name: Compile standalone STM32F207 diagnostic firmware
         shell: bash
         run: |
           set -euo pipefail
-          build_dir=".pio/build/JZ_TS35_DIAG"
-          elf="$(find "$build_dir" -maxdepth 1 -type f -name '*.elf' -print -quit)"
-          test -n "$elf"
 
-          toolchain="$HOME/.platformio/packages/toolchain-gccarmnoneeabi/bin"
-          objcopy="$toolchain/arm-none-eabi-objcopy"
-          nm="$toolchain/arm-none-eabi-nm"
-          objdump="$toolchain/arm-none-eabi-objdump"
-          test -x "$objcopy"
-          test -x "$nm"
-          test -x "$objdump"
+          BUILD_DIR=".build/jz-ts35-diagnostic"
+          mkdir -p "$BUILD_DIR"
 
-          "$objcopy" -O ihex "$elf" "$build_dir/JZ-TS35-DIAG.hex"
-          "$objcopy" -O binary "$elf" "$build_dir/JZ-TS35-DIAG.bin"
-          "$nm" -n "$elf" > "$build_dir/JZ-TS35-DIAG.symbols.txt"
-          "$objdump" -h "$elf" > "$build_dir/JZ-TS35-DIAG.sections.txt"
+          CPU_FLAGS="-mcpu=cortex-m3 -mthumb -mfloat-abi=soft"
+          DEFINES="-DSTM32F207xx -DHSE_VALUE=8000000U"
+          INCLUDES="-ITFT/src/Libraries/cmsis/Core-CM3 -ITFT/src/Libraries/cmsis/stm32f2xx"
+          CFLAGS="$CPU_FLAGS $DEFINES $INCLUDES -std=gnu11 -O0 -g3 -ffunction-sections -fdata-sections -fno-common -fno-builtin -fno-unwind-tables -fno-asynchronous-unwind-tables -Wall -Wextra"
+
+          arm-none-eabi-gcc $CPU_FLAGS -x assembler-with-cpp -c \
+            TFT/src/Libraries/Startup/stm32f2xx/startup_stm32f2xx.s \
+            -o "$BUILD_DIR/startup.o"
+
+          arm-none-eabi-gcc $CFLAGS -c \
+            TFT/src/Libraries/cmsis/stm32f2xx/system_stm32f2xx.c \
+            -o "$BUILD_DIR/system_stm32f2xx.o"
+
+          arm-none-eabi-gcc $CFLAGS -c \
+            TFT/diag/main.c \
+            -o "$BUILD_DIR/diag_main.o"
+
+          arm-none-eabi-gcc $CPU_FLAGS -nostdlib \
+            -Wl,--gc-sections \
+            -Wl,--build-id=none \
+            -Wl,-Map="$BUILD_DIR/JZ-TS35-DIAG.map" \
+            -T buildroot/ldscripts/jz_ts35_v2_1_diag.ld \
+            "$BUILD_DIR/startup.o" \
+            "$BUILD_DIR/system_stm32f2xx.o" \
+            "$BUILD_DIR/diag_main.o" \
+            -Wl,--start-group -lgcc -Wl,--end-group \
+            -o "$BUILD_DIR/JZ-TS35-DIAG.elf"
+
+          arm-none-eabi-objcopy -O ihex \
+            "$BUILD_DIR/JZ-TS35-DIAG.elf" "$BUILD_DIR/JZ-TS35-DIAG.hex"
+          arm-none-eabi-objcopy -O binary \
+            "$BUILD_DIR/JZ-TS35-DIAG.elf" "$BUILD_DIR/JZ-TS35-DIAG.bin"
+          arm-none-eabi-nm -n \
+            "$BUILD_DIR/JZ-TS35-DIAG.elf" > "$BUILD_DIR/JZ-TS35-DIAG.symbols.txt"
+          arm-none-eabi-objdump -h \
+            "$BUILD_DIR/JZ-TS35-DIAG.elf" > "$BUILD_DIR/JZ-TS35-DIAG.sections.txt"
 
           echo "=== Diagnostic symbols ==="
-          grep -E 'g_diag|SysTick_Handler|HardFault_Handler|Fault_Capture|Reset_Handler| main$' "$build_dir/JZ-TS35-DIAG.symbols.txt" || true
+          grep -E 'g_diag|SysTick_Handler|HardFault_Handler|Fault_Capture|Reset_Handler| main$' \
+            "$BUILD_DIR/JZ-TS35-DIAG.symbols.txt" || true
           echo "=== ELF sections ==="
-          cat "$build_dir/JZ-TS35-DIAG.sections.txt"
+          cat "$BUILD_DIR/JZ-TS35-DIAG.sections.txt"
 
-      - name: Upload diagnostic firmware
+      - name: Upload diagnostic firmware and debug symbols
         uses: actions/upload-artifact@v4
         with:
           name: JZ-TS35-STM32F207-MINIMAL-DIAGNOSTIC
           if-no-files-found: error
           path: |
-            .pio/build/JZ_TS35_DIAG/*.elf
-            .pio/build/JZ_TS35_DIAG/JZ-TS35-DIAG.hex
-            .pio/build/JZ_TS35_DIAG/JZ-TS35-DIAG.bin
-            .pio/build/JZ_TS35_DIAG/JZ-TS35-DIAG.symbols.txt
-            .pio/build/JZ_TS35_DIAG/JZ-TS35-DIAG.sections.txt
+            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.elf
+            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.hex
+            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.bin
+            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.map
+            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.symbols.txt
+            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.sections.txt
