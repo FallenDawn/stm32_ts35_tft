@@ -17,6 +17,7 @@
 #define CMD_FAST_READ_DATA 0x0B
 #define W25QXX_DUMMY_BYTE  0xFF
 #define W25QXX_SPI_PAGESIZE 0x100
+#define W25QXX_SECTOR_SIZE  0x1000UL
 
 
 uint8_t W25Qxx_SPI_Read_Write_Byte(uint8_t data);
