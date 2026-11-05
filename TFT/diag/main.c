@@ -59,6 +59,11 @@ typedef struct
     volatile uint32_t fault_mmfar;
     volatile uint32_t fault_bfar;
     volatile uint32_t fault_loop;
+
+    /* Stage 1: bounded HSE oscillator check; SYSCLK remains on HSI. */
+    volatile uint32_t hse_result;          /* 0=pending, 1=ready, 2=timeout */
+    volatile uint32_t hse_poll_count;
+    volatile uint32_t hse_rcc_cr;
 } DiagnosticState;
 
 /* Global, non-static symbol: locate it in the ELF with arm-none-eabi-nm. */
@@ -172,6 +177,35 @@ int main(void)
             ++g_diag.loop_counter;
             __NOP();
         }
+    }
+
+    /*
+     * Stage 1 only: start the external high-speed oscillator and check HSERDY.
+     * Do not change SYSCLK, PLL, bus prescalers, or Flash latency here.
+     * A bounded poll guarantees a missing/bad HSE cannot hang the CPU.
+     * Keep HSE enabled on success for the later PLL validation stage.
+     */
+    g_diag.hse_result = 0UL;
+    g_diag.hse_poll_count = 0UL;
+    RCC->CR |= RCC_CR_HSEON;
+
+    while ((RCC->CR & RCC_CR_HSERDY) == 0UL &&
+           g_diag.hse_poll_count < 1000000UL)
+    {
+        ++g_diag.hse_poll_count;
+        __NOP();
+    }
+
+    g_diag.hse_rcc_cr = RCC->CR;
+    if ((RCC->CR & RCC_CR_HSERDY) != 0UL)
+    {
+        g_diag.hse_result = 1UL; /* HSE ready */
+    }
+    else
+    {
+        g_diag.hse_result = 2UL; /* bounded timeout; remain on HSI */
+        RCC->CR &= ~RCC_CR_HSEON;
+        g_diag.hse_rcc_cr = RCC->CR;
     }
 
     g_diag.status = DIAG_STATUS_RUNNING;
