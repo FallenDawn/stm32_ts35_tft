@@ -73,7 +73,7 @@
 //LCD Backlight pin (PWM can adjust brightness)
 #if defined(TFT24_V1_1)
   #define LCD_LED_PIN   PA8
-#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define LCD_LED_PIN   PD12
 #elif defined(MKS_32_V1_4)
  #define LCD_LED_PIN    PD14  
@@ -116,7 +116,7 @@
   #define XPT2046_MISO  PB4
   #define XPT2046_MOSI  PB5
   #define XPT2046_TPEN  PC1
-#elif defined(TFT35_V3_0) || defined(TFT28_V3_0) 
+#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0) 
   #define XPT2046_CS    PE6
   #define XPT2046_SCK   PE5
   #define XPT2046_MISO  PE4
@@ -139,7 +139,7 @@
   #define SD_HIGH_SPEED 0
   #define SD_SPI        _SPI2
   #define SPI2_CS_PIN   PB12
-#elif defined(TFT24_V1_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(TFT24_V1_1) || defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define SD_SPI_SUPPORT
   #define SD_LOW_SPEED  7
   #define SD_HIGH_SPEED 1
@@ -188,7 +188,7 @@
 #endif
 
 //ST7920 Simulator SPI pins
-#if defined(TFT24_V1_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#if defined(TFT24_V1_1) || defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define ST7920_SPI    _SPI2
 #elif defined(MKS_32_V1_4) 
   //#define ST7920_SPI    _SPI1
@@ -237,7 +237,7 @@
 #if defined(TFT35_V2_0)
   #define PS_ON_PIN      PD12
   #define FIL_RUNOUT_PIN PD11
-#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define PS_ON_PIN      PA12
   #define FIL_RUNOUT_PIN PA15
 #elif defined(MKS_32_V1_4)
@@ -255,7 +255,7 @@
 #endif
 
 //LCD resolution, font and icon size
-#if defined(TFT35_V1_0) || defined(TFT35_V1_1) || defined(TFT35_V1_2) || defined(TFT35_V2_0) || defined(TFT35_V3_0)
+#if defined(TFT35_V1_0) || defined(TFT35_V1_1) || defined(TFT35_V1_2) || defined(TFT35_V2_0) || defined(JZ_TS35_V2_1) || defined(TFT35_V3_0)
   #define LCD_WIDTH	  480
   #define LCD_HEIGHT	320
   
@@ -324,13 +324,13 @@
   #define selecticonw 70
 #endif
 
-#if defined(TFT28_V3_0) || defined(TFT35_V3_0)
+#if defined(JZ_TS35_V2_1) || defined(TFT28_V3_0) || defined(TFT35_V3_0)
   #define LED_color_PIN PC7
 #endif
 
 
 
-#if defined(TFT35_V1_0) || defined(TFT35_V1_1) || defined(TFT35_V1_2)|| defined(TFT35_V2_0) || defined(TFT35_V3_0)
+#if defined(TFT35_V1_0) || defined(TFT35_V1_1) || defined(TFT35_V1_2)|| defined(TFT35_V2_0) || defined(JZ_TS35_V2_1) || defined(TFT35_V3_0)
   #define ROOT_DIR "TFT35"
 #elif defined(TFT28_V1_0) || defined(TFT28_V3_0)
   #define ROOT_DIR "TFT28"
@@ -354,6 +354,8 @@
     #define HARDWARE_VERSION "TFT24_V1.1"
   #elif defined(TFT35_V2_0)
     #define HARDWARE_VERSION "TFT35_V2.0"
+  #elif defined(JZ_TS35_V2_1)
+    #define HARDWARE_VERSION "JZ-TS35-V2.1"
   #elif defined(TFT35_V3_0)
     #define HARDWARE_VERSION "TFT35_V3.0"
   #elif defined(TFT28_V3_0)
