@@ -14,7 +14,7 @@
 #define WORD_UNICODE            0x280000 // Legacy Unicode font base; JZ target disables this oversized font.
 #if defined(JZ_TS35_V2_1)
   // W25Q32 is 4 MiB. JZ uses ASCII-only font data in the free region after TFT35 icons.
-  #define BYTE_ASCII_ADDR       0x280000
+  #define BYTE_ASCII_ADDR       0x290000
 #else
   #define BYTE_ASCII_ADDR       0x700000
 #endif
