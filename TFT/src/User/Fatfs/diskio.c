@@ -9,10 +9,12 @@
 
 #include "ff.h"			/* Obtains integer types */
 #include "diskio.h"		/* Declarations of disk functions */
-#include "usb_conf.h"
-#include "usbh_msc_core.h"
-#include "usbh_usr.h"
 #include "variants.h"
+#if defined(U_DISK_SUPPROT)
+  #include "usb_conf.h"
+  #include "usbh_msc_core.h"
+  #include "usbh_usr.h"
+#endif
 
 #ifdef SD_SPI_SUPPORT
   #include "sd.h"
@@ -22,9 +24,15 @@
 
 /* Definitions of physical drive number for each drive */\
 #define DEV_MMC		0	/* MMC/SD card to physical drive 0 */
-#define DEV_USB		1	/* USB disk to physical drive 1 */
+#if defined(U_DISK_SUPPROT)
+  #define DEV_USB		1	/* USB disk to physical drive 1 */
+#endif
 
-static volatile DSTATUS diskStatus[FF_VOLUMES] = {STA_NOINIT, STA_NOINIT};	/* Disk status */
+#if FF_VOLUMES > 1
+static volatile DSTATUS diskStatus[FF_VOLUMES] = {STA_NOINIT, STA_NOINIT};
+#else
+static volatile DSTATUS diskStatus[FF_VOLUMES] = {STA_NOINIT};
+#endif
 
 
 /*-----------------------------------------------------------------------*/
@@ -50,6 +58,7 @@ DSTATUS disk_initialize (
 	BYTE pdrv				/* Physical drive nmuber to identify the drive */
 )
 {  
+  if (pdrv >= FF_VOLUMES) return STA_NOINIT;
   for(u8 i = 0; i < FF_VOLUMES; i++)
   {
     diskStatus[i] = STA_NOINIT;
@@ -63,12 +72,14 @@ DSTATUS disk_initialize (
     } 
     break;
       
+	#if defined(U_DISK_SUPPROT)
 	case DEV_USB :
 		if (HCD_IsDeviceConnected(&USB_OTG_Core))
     {  
       diskStatus[pdrv] &= ~STA_NOINIT;
     }
     break;
+	#endif
       
     default:
       return RES_PARERR;
@@ -89,7 +100,7 @@ DRESULT disk_read (
 	UINT count		/* Number of sectors to read */
 )
 {
-  if (!count) return RES_PARERR;
+  if (pdrv >= FF_VOLUMES || !count) return RES_PARERR;
   if (diskStatus[pdrv] & STA_NOINIT) return RES_NOTRDY;
 
 	switch (pdrv) {
@@ -100,11 +111,13 @@ DRESULT disk_read (
     }
     return RES_OK;
     
+	#if defined(U_DISK_SUPPROT)
 	case DEV_USB :
     if(USBH_UDISK_Read(buff, sector, count) == 0)
       return RES_OK;
     else
       return RES_ERROR;
+	#endif
 	}
 
 	return RES_PARERR;
@@ -125,7 +138,7 @@ DRESULT disk_write (
 	UINT count			/* Number of sectors to write */
 )
 {
-  if (!count) return RES_PARERR;
+  if (pdrv >= FF_VOLUMES || !count) return RES_PARERR;
   if (diskStatus[pdrv] & STA_NOINIT) return RES_NOTRDY;
   if (diskStatus[pdrv] & STA_PROTECT) return RES_WRPRT;
 
@@ -137,11 +150,13 @@ DRESULT disk_write (
     }
     return RES_OK;
 
+	#if defined(U_DISK_SUPPROT)
 	case DEV_USB :
 		if(USBH_UDISK_Write((u8*)buff, sector, count) == 0)
       return RES_OK;
     else
       return RES_ERROR;
+  	#endif
   }
 
 	return RES_PARERR;
@@ -160,10 +175,12 @@ DRESULT disk_ioctl (
 	void *buff		/* Buffer to send/receive control data */
 )
 {
+	if (pdrv >= FF_VOLUMES) return RES_PARERR;
 	switch (pdrv) {
 	case DEV_MMC :
     return RES_OK;
 
+	#if defined(U_DISK_SUPPROT)
 	case DEV_USB : 
     {
       DRESULT res = RES_ERROR;
@@ -192,6 +209,7 @@ DRESULT disk_ioctl (
       }
       return res;
     }
+	#endif
 	}
 
 	return RES_PARERR;
