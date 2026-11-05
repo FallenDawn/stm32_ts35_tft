@@ -21,6 +21,7 @@ static FONT_BITMAP font[] = {
     // the first character code point in this font bitmap file
     0x20, // the first character in BYTE_ASCII_ADDR is 0x20(' ')
   },
+#if !defined(JZ_TS35_V2_1)
   { // Czech(Latin 1 Supplement, Extended-A&B)
     0x80,
     0x24F,
@@ -61,6 +62,7 @@ static FONT_BITMAP font[] = {
     BYTE_WIDTH * 2,
     0,
   },
+#endif
 };
 
 // decode character encode info (UTF8)
@@ -104,7 +106,10 @@ static void getBitMapFontInfo(CHAR_INFO *pInfo)
 void getCharacterInfo(const uint8_t *ch, CHAR_INFO *pInfo)
 {
   pInfo->bytes = 0;
-    
+  pInfo->pixelWidth = 0;
+  pInfo->pixelHeight = 0;
+  pInfo->bitMapAddr = 0;
+
   if(ch == NULL || *ch == 0) return;
   
   getUTF8EncodeInfo(ch, pInfo);
