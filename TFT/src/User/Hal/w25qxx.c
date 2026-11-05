@@ -165,7 +165,7 @@ void W25Qxx_WriteBuffer(uint8_t* pBuffer, uint32_t WriteAddr, uint16_t NumByteTo
 void W25Qxx_ReadBuffer(uint8_t* pBuffer, uint32_t ReadAddr, uint16_t NumByteToRead)
 {
 #if defined(W25QXX_FLASH_CAPACITY)
-  if (pBuffer == NULL || ReadAddr > W25QXX_FLASH_CAPACITY ||
+  if (pBuffer == 0 || ReadAddr > W25QXX_FLASH_CAPACITY ||
       NumByteToRead > W25QXX_FLASH_CAPACITY - ReadAddr)
     return;
 #endif
