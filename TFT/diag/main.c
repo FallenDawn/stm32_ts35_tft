@@ -130,6 +130,9 @@ int main(void)
 {
     uint32_t last_heartbeat = 0;
 
+    /* Recalculate HCLK from live RCC registers (also detects HSE fallback). */
+    SystemCoreClockUpdate();
+
     /* Record startup state before clearing the reset flags. */
     g_diag.magic = DIAG_MAGIC;
     g_diag.version = DIAG_VERSION;
