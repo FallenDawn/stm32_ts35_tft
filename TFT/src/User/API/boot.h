@@ -11,8 +11,13 @@
 #define ICON_ADDR(num)          ((num)*0x5000+0x4B000)
 
 //
-#define WORD_UNICODE            0x280000 // unicode (+0x480000 4.5M)
-#define BYTE_ASCII_ADDR         0x700000 // ascii (+0x1000 4K)
+#define WORD_UNICODE            0x280000 // Legacy Unicode font base; JZ target disables this oversized font.
+#if defined(JZ_TS35_V2_1)
+  // W25Q32 is 4 MiB. JZ uses ASCII-only font data in the free region after TFT35 icons.
+  #define BYTE_ASCII_ADDR       0x280000
+#else
+  #define BYTE_ASCII_ADDR       0x700000
+#endif
 //#define BYTE_RESERVE_ADDR      0x710000
 
 #define INFOBOX_ADDR            (BYTE_ASCII_ADDR + 0x1000) // total byte size 0xA7F8
