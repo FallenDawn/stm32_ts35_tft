@@ -25,7 +25,7 @@ jobs:
         run: |
           elf="$(find .pio/build/JZ_TS35_V2_1 -maxdepth 1 -type f -name '*.elf' -print -quit)"
           test -n "$elf"
-          objcopy="$(find "$HOME/.platformio/packages/toolchain-gccarmnoneeabi" -type f -name arm-none-eabi-objcopy -print -quit)"
+          objcopy="$(find "$HOME/.platformio/packages/toolchain-gccarmnoneeabi" -name arm-none-eabi-objcopy -print -quit)"
           test -x "$objcopy"
           "$objcopy" -O ihex "$elf" "${elf%.elf}.hex"
       - name: Upload firmware artifacts
