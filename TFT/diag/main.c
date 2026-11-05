@@ -12,7 +12,6 @@
  */
 
 #include "stm32f2xx.h"
-#include "system_stm32f2xx.h"
 
 #define DIAG_MAGIC              0x4A5A4447UL /* "JZDG" */
 #define DIAG_VERSION            0x00010001UL
@@ -64,6 +63,20 @@ typedef struct
 
 /* Global, non-static symbol: locate it in the ELF with arm-none-eabi-nm. */
 volatile DiagnosticState g_diag __attribute__((used, aligned(4)));
+
+/*
+ * Diagnostic-only clock setup:
+ * Keep the STM32F207 on its reset-default 16 MHz HSI clock.
+ * Do not start HSE, PLL or PLLI2S here. The board oscillator and PLL
+ * configuration are not yet verified, and this test does not need them.
+ * The startup assembly calls SystemInit() before main().
+ */
+void SystemInit(void)
+{
+    SCB->VTOR = 0x08000000UL;
+    __DSB();
+    __ISB();
+}
 
 static volatile uint32_t g_tick_ms;
 
@@ -130,16 +143,13 @@ int main(void)
 {
     uint32_t last_heartbeat = 0;
 
-    /* Recalculate HCLK from live RCC registers (also detects HSE fallback). */
-    SystemCoreClockUpdate();
-
     /* Record startup state before clearing the reset flags. */
     g_diag.magic = DIAG_MAGIC;
     g_diag.version = DIAG_VERSION;
     g_diag.status = DIAG_STATUS_BOOT;
     g_diag.boot_count = 1;
 
-    g_diag.clock_hz = SystemCoreClock;
+    g_diag.clock_hz = HSI_VALUE;
     g_diag.vector_table = SCB->VTOR;
     g_diag.reset_flags = RCC->CSR;
     g_diag.rcc_cr = RCC->CR;
@@ -147,7 +157,7 @@ int main(void)
     g_diag.flash_acr = FLASH->ACR;
 
     /* 1 kHz time base. No peripheral clock or GPIO setup is needed. */
-    g_diag.systick_config_result = SysTick_Config(SystemCoreClock / 1000UL);
+    g_diag.systick_config_result = SysTick_Config(HSI_VALUE / 1000UL);
     g_diag.systick_load = SysTick->LOAD;
     g_diag.systick_control = SysTick->CTRL;
 
