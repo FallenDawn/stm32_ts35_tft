@@ -163,7 +163,11 @@
 / Drive/Volume Configurations
 /---------------------------------------------------------------------------*/
 
+#if defined(JZ_TS35_V2_1)
+#define FF_VOLUMES		1   /* JZ target has SD only; USB host is not populated. */
+#else
 #define FF_VOLUMES		2
+#endif
 /* Number of volumes (logical drives) to be used. (1-10) */
 
 
