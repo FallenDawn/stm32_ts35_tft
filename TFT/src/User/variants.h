@@ -78,7 +78,7 @@
 //LCD Backlight pin (PWM can adjust brightness)
 #if defined(TFT24_V1_1)
   #define LCD_LED_PIN   PA8
-#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define LCD_LED_PIN   PD12
 #elif defined(MKS_32_V1_4)
  #define LCD_LED_PIN    PD14  
