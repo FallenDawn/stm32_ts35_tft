@@ -90,6 +90,9 @@
   #define SERIAL_PORT   _USART1  //default usart port
   #define SERIAL_PORT_2 _USART2
   #define SERIAL_PORT_3 _USART3
+#elif defined(JZ_TS35_V2_1)
+  // Provisional printer UART from the F207 TFT35 reference; verify the JZ board connector.
+  #define SERIAL_PORT   _USART2
 #elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define SERIAL_PORT   _USART2  //default usart port
   #define SERIAL_PORT_2 _USART1
