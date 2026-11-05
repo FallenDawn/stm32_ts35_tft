@@ -33,7 +33,9 @@
   #include "stm32f10x.h"
 #elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define VECT_TAB_FLASH 0x08008000
-  #define HSE_VALUE ((uint32_t)8000000) //8Mhz
+  #ifndef HSE_VALUE
+    #define HSE_VALUE ((uint32_t)8000000) //8MHz crystal, also supplied to all framework translation units
+  #endif
   #define F_CPUM 120
   #define STM32F2XX
   #include "stm32f2xx.h"
