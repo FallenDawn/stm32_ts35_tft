@@ -30,8 +30,8 @@ jobs:
           mkdir -p "$BUILD_DIR"
 
           CPU_FLAGS="-mcpu=cortex-m3 -mthumb -mfloat-abi=soft"
-          DEFINES="-DSTM32F207xx -DJZ_TS35_V2_1= -DHSE_VALUE=8000000U"
-          INCLUDES="-ITFT/src/Libraries/cmsis/Core-CM3 -ITFT/src/Libraries/cmsis/stm32f2xx -ITFT/src/User"
+          DEFINES="-DSTM32F207xx -D_VARIANTS_H_ -DHSE_VALUE=8000000U"
+          INCLUDES="-ITFT/src/Libraries/cmsis/Core-CM3 -ITFT/src/Libraries/cmsis/stm32f2xx"
           CFLAGS="$CPU_FLAGS $DEFINES $INCLUDES -std=gnu11 -O0 -g3 -ffunction-sections -fdata-sections -fno-common -fno-builtin -fno-unwind-tables -fno-asynchronous-unwind-tables -Wall -Wextra"
 
           arm-none-eabi-gcc $CPU_FLAGS -x assembler-with-cpp -c \
