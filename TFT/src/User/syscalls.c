@@ -28,7 +28,7 @@ caddr_t _sbrk(int incr)
     current = (uintptr_t)heap_end;
     heap_limit = (uintptr_t)&_estack - (uintptr_t)&_Min_Stack_Size;
 
-    if (incr < 0 || (uintptr_t)incr > heap_limit - current)
+    if (current > heap_limit || incr < 0 || (uintptr_t)incr > heap_limit - current)
     {
         errno = ENOMEM;
         return (caddr_t)-1;
