@@ -15,9 +15,9 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.12"
       - name: Install PlatformIO
-        run: python -m pip install --upgrade platformio
+        run: python -m pip install platformio==6.2.0
       - name: Build STM32F207VCT6 + ILI9486L
         run: pio run -e JZ_TS35_V2_1
       - name: Upload firmware artifacts
