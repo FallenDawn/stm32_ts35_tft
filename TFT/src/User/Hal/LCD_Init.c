@@ -21,38 +21,45 @@ void LCD_LED_Init(void)
 #endif
 
 #if defined(ILI9486L)
- // ILI9486L — 320x480 panel on the 16-bit FSMC 8080 bus.
- // Register sequence is intentionally isolated from the legacy ILI9488 path.
+ // ILI9486L — 320x480 panel, 16-bit 8080/FSMC interface, RGB565.
+ // Sequence follows the ILI9486L parallel-interface power-up flow.
  void LCD_init_RGB(void)
  {
-   LCD_WR_REG(0xE0);
-   LCD_WR_DATA(0x00); LCD_WR_DATA(0x07); LCD_WR_DATA(0x0F);
-   LCD_WR_DATA(0x0D); LCD_WR_DATA(0x1B); LCD_WR_DATA(0x0A);
-   LCD_WR_DATA(0x3C); LCD_WR_DATA(0x78); LCD_WR_DATA(0x4A);
-   LCD_WR_DATA(0x07); LCD_WR_DATA(0x0E); LCD_WR_DATA(0x09);
-   LCD_WR_DATA(0x1B); LCD_WR_DATA(0x1E); LCD_WR_DATA(0x0F);
-
-   LCD_WR_REG(0xE1);
-   LCD_WR_DATA(0x00); LCD_WR_DATA(0x22); LCD_WR_DATA(0x24);
-   LCD_WR_DATA(0x06); LCD_WR_DATA(0x12); LCD_WR_DATA(0x07);
-   LCD_WR_DATA(0x36); LCD_WR_DATA(0x47); LCD_WR_DATA(0x47);
-   LCD_WR_DATA(0x06); LCD_WR_DATA(0x0A); LCD_WR_DATA(0x07);
-   LCD_WR_DATA(0x30); LCD_WR_DATA(0x37); LCD_WR_DATA(0x0F);
-
-   LCD_WR_REG(0xC0); LCD_WR_DATA(0x0D); LCD_WR_DATA(0x0D);
-   LCD_WR_REG(0xC1); LCD_WR_DATA(0x43);
-   LCD_WR_REG(0xC2); LCD_WR_DATA(0x00);
-   LCD_WR_REG(0xC5); LCD_WR_DATA(0x00); LCD_WR_DATA(0x48);
-   LCD_WR_REG(0xB0); LCD_WR_DATA(0x00);
-   LCD_WR_REG(0xB1); LCD_WR_DATA(0xB0);
-   LCD_WR_REG(0xB4); LCD_WR_DATA(0x02);
-   LCD_WR_REG(0xB6); LCD_WR_DATA(0x02); LCD_WR_DATA(0x02);
-   LCD_WR_REG(0xE9); LCD_WR_DATA(0x00);
-   LCD_WR_REG(0x3A); LCD_WR_DATA(0x55); // RGB565
-   LCD_WR_REG(0x36); LCD_WR_DATA(0x28); // initial landscape/BGR; verify on panel
-   LCD_WR_REG(0x11);
+   LCD_WR_REG(0x01);                 // Software reset
    Delay_ms(120);
-   LCD_WR_REG(0x29);
+
+   LCD_WR_REG(0x11);                 // Sleep out
+   Delay_ms(120);
+
+   LCD_WR_REG(0x3A); LCD_WR_DATA(0x55); // 16-bit RGB565 on 16-bit MCU bus
+
+   LCD_WR_REG(0xC0);                 // Power Control 1
+   LCD_WR_DATA(0x0E); LCD_WR_DATA(0x0E);
+   LCD_WR_REG(0xC1);                 // Power Control 2
+   LCD_WR_DATA(0x41); LCD_WR_DATA(0x00);
+   LCD_WR_REG(0xC2); LCD_WR_DATA(0x55);
+   LCD_WR_REG(0xC5);                 // VCOM control
+   LCD_WR_DATA(0x00); LCD_WR_DATA(0x00);
+   LCD_WR_DATA(0x00); LCD_WR_DATA(0x00);
+
+   LCD_WR_REG(0xE0);                 // Positive gamma
+   LCD_WR_DATA(0x0F); LCD_WR_DATA(0x1F); LCD_WR_DATA(0x1C);
+   LCD_WR_DATA(0x0C); LCD_WR_DATA(0x0F); LCD_WR_DATA(0x08);
+   LCD_WR_DATA(0x48); LCD_WR_DATA(0x98); LCD_WR_DATA(0x37);
+   LCD_WR_DATA(0x0A); LCD_WR_DATA(0x13); LCD_WR_DATA(0x04);
+   LCD_WR_DATA(0x11); LCD_WR_DATA(0x0D); LCD_WR_DATA(0x00);
+
+   LCD_WR_REG(0xE1);                 // Negative gamma
+   LCD_WR_DATA(0x0F); LCD_WR_DATA(0x32); LCD_WR_DATA(0x2E);
+   LCD_WR_DATA(0x0B); LCD_WR_DATA(0x0D); LCD_WR_DATA(0x05);
+   LCD_WR_DATA(0x47); LCD_WR_DATA(0x75); LCD_WR_DATA(0x37);
+   LCD_WR_DATA(0x06); LCD_WR_DATA(0x10); LCD_WR_DATA(0x03);
+   LCD_WR_DATA(0x24); LCD_WR_DATA(0x20); LCD_WR_DATA(0x00);
+
+   LCD_WR_REG(0x20);                 // Display inversion OFF
+   LCD_WR_REG(0x36); LCD_WR_DATA(0x28); // Landscape + BGR
+   LCD_WR_REG(0x29);                 // Display ON
+   Delay_ms(150);
  }
 #elif defined(TFT35_V1_2) || defined(TFT35_V2_0) || defined(TFT35_V3_0)
  //ILI9488
