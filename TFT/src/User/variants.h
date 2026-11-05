@@ -162,7 +162,8 @@
   #define SD_CD_PIN     PA13
 #elif defined(TFT35_V2_0)
   #define SD_CD_PIN     PC6
-#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
+  // Provisional: use the TFT35 V3 SD-card detect pin until JZ schematic tracing confirms it.
   #define SD_CD_PIN     PC4
 #elif defined(MKS_32_V1_4)
   #define SD_CD_PIN     PB15  
@@ -177,7 +178,8 @@
   #define W25Qxx_SPEED  0
   #define W25Qxx_SPI    _SPI3
   #define SPI3_CS_PIN   PD2
-#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
+  // Provisional W25Q32 wiring: SPI3 / PB6 CS inherited from the F207 TFT35 V3 reference.
   #define W25Qxx_SPEED  1
   #define W25Qxx_SPI    _SPI3
   #define SPI3_CS_PIN   PB6
@@ -237,7 +239,7 @@
 #if defined(TFT35_V2_0)
   #define PS_ON_PIN      PD12
   #define FIL_RUNOUT_PIN PD11
-#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define PS_ON_PIN      PA12
   #define FIL_RUNOUT_PIN PA15
 #elif defined(MKS_32_V1_4)
