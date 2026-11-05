@@ -327,7 +327,7 @@
   #define selecticonw 70
 #endif
 
-#if defined(JZ_TS35_V2_1) || defined(TFT28_V3_0) || defined(TFT35_V3_0)
+#if defined(TFT28_V3_0) || defined(TFT35_V3_0)
   #define LED_color_PIN PC7
 #endif
 
