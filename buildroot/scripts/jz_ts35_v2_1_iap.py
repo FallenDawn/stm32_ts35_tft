@@ -6,17 +6,25 @@ Import("env")
 custom_ld_script = os.path.abspath("buildroot/ldscripts/jz_ts35_v2_1_0x8000.ld")
 linkflags = list(env.get("LINKFLAGS", []))
 script_flag_found = False
+index = 0
 
-for index, flag in enumerate(linkflags):
-    flag_text = str(flag)
-    if flag_text.startswith("-Wl,-T"):
-        linkflags[index] = "-Wl,-T" + custom_ld_script
+while index < len(linkflags):
+    flag_text = str(linkflags[index])
+    if flag_text in ("-T", "-Wl,-T"):
+        if index + 1 < len(linkflags):
+            linkflags[index + 1] = custom_ld_script
+            script_flag_found = True
+            index += 2
+            continue
+    elif flag_text.startswith("-Wl,-T,"):
+        linkflags[index] = "-Wl,-T," + custom_ld_script
         script_flag_found = True
-    elif flag_text == "-T" and index + 1 < len(linkflags):
-        linkflags[index + 1] = custom_ld_script
+    elif flag_text.startswith("-Wl,-T"):
+        linkflags[index] = "-Wl,-T," + custom_ld_script
         script_flag_found = True
+    index += 1
 
 if not script_flag_found:
-    linkflags.append("-Wl,-T" + custom_ld_script)
+    linkflags.append("-Wl,-T," + custom_ld_script)
 
 env.Replace(LINKFLAGS=linkflags)
