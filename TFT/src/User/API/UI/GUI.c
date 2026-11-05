@@ -511,7 +511,8 @@ CHAR_INFO GUI_DispOne(int16_t sx, int16_t sy, const uint8_t *p)
   if(p == NULL || *p == 0) return info;
   
   getCharacterInfo(p, &info);
-  
+  if (info.pixelWidth == 0 || info.pixelHeight == 0) return info;
+
   uint8_t x = 0, 
           y = 0, 
           j = 0, 
