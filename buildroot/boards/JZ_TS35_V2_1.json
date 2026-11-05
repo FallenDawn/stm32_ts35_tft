@@ -1,0 +1,39 @@
+{
+  "build": {
+    "core": "stm32",
+    "cpu": "cortex-m3",
+    "extra_flags": "-DSTM32F207xx",
+    "f_cpu": "120000000L",
+    "mcu": "stm32f207vct6",
+    "variant": "stm32f2"
+  },
+  "connectivity": [
+    "can",
+    "ethernet"
+  ],
+  "debug": {
+    "default_tools": [
+      "stlink"
+    ],
+    "jlink_device": "STM32F207VC",
+    "onboard_tools": [
+      "stlink"
+    ],
+    "openocd_target": "stm32f2x",
+    "svd_path": "STM32F20x.svd"
+  },
+  "frameworks": [
+    "stm32cube"
+  ],
+  "name": "JZ-TS35 V2.1 (STM32F207VCT6, 128KB SRAM, 256KB Flash)",
+  "upload": {
+    "maximum_ram_size": 131072,
+    "maximum_size": 262144,
+    "protocol": "stlink",
+    "protocols": [
+      "stlink"
+    ]
+  },
+  "url": "https://www.st.com/en/microcontrollers-microprocessors/stm32f207vc.html",
+  "vendor": "ST"
+}
