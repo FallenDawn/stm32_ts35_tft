@@ -65,7 +65,18 @@ bool bmpDecode(char *bmp, u32 addr)
 
   f_lseek(&bmpFile, 18);  
   f_read(&bmpFile, &w, sizeof(int),&mybr);  
-  f_read(&bmpFile, &h, sizeof(int),&mybr);  
+  f_read(&bmpFile, &h, sizeof(int),&mybr);
+
+#if defined(W25QXX_FLASH_CAPACITY)
+  // Reject malformed or oversized bitmaps before erasing any SPI-flash sector.
+  if (w <= 0 || h <= 0 ||
+      addr > W25QXX_FLASH_CAPACITY ||
+      ((uint64_t)w * (uint64_t)h * 2ULL) > (uint64_t)(W25QXX_FLASH_CAPACITY - addr))
+  {
+    f_close(&bmpFile);
+    return false;
+  }
+#endif
 
   f_lseek(&bmpFile, 28);  
   f_read(&bmpFile, &bpp, sizeof(short),&mybr);  
@@ -153,8 +164,31 @@ void updateFont(char *font, u32 addr)
   
   if (f_open(&myfp, font, FA_OPEN_EXISTING|FA_READ) != FR_OK)  return;
 
+#if defined(W25QXX_FLASH_CAPACITY)
+  // updateFont writes whole 4 KiB sectors, including the final partial sector.
+  // Validate the rounded size before the first erase to avoid wrapping W25Q32 addresses.
+  {
+    uint64_t fileSize = (uint64_t)f_size(&myfp);
+    uint64_t storedSize = (fileSize + W25QXX_SECTOR_SIZE - 1ULL) &
+                          ~((uint64_t)W25QXX_SECTOR_SIZE - 1ULL);
+    if (fileSize == 0 || addr > W25QXX_FLASH_CAPACITY ||
+        storedSize > (uint64_t)(W25QXX_FLASH_CAPACITY - addr))
+    {
+      f_close(&myfp);
+      GUI_Clear(BACKGROUND_COLOR);
+      GUI_DispString(0, 100, (u8*)"Font exceeds W25Q32 capacity");
+      Delay_ms(1500);
+      return;
+    }
+  }
+#endif
+
   tempbuf = malloc(W25QXX_SECTOR_SIZE);
-  if (tempbuf == NULL)  return;
+  if (tempbuf == NULL)
+  {
+    f_close(&myfp);
+    return;
+  }
   GUI_Clear(BACKGROUND_COLOR);
   my_sprintf((void *)buffer,"%s Size: %dKB",font, (u32)f_size(&myfp)>>10);
   GUI_DispString(0, 100, (u8*)buffer);
