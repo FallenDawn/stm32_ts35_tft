@@ -54,6 +54,7 @@
   #define ILI9486L
   #define STM32_HAS_FSMC
   #define LCD_DATA_16BIT 1
+  #define W25QXX_FLASH_CAPACITY (4UL * 1024UL * 1024UL)
 #elif defined(TFT35_V1_2) || defined(TFT35_V2_0) || defined(TFT35_V3_0) 
   #define ILI9488
   #define STM32_HAS_FSMC
