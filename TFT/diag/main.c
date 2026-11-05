@@ -74,6 +74,15 @@ typedef struct
     volatile uint32_t pll_flash_acr;
     volatile uint32_t pll_expected_vco_hz;
     volatile uint32_t pll_expected_sysclk_hz;
+
+    /* Stage 2B: bounded SYSCLK switch to the already-locked 96 MHz PLL. */
+    volatile uint32_t switch_result;       /* 0=pending, 1=PLL, 2=PLL timeout, 3=HSI fallback */
+    volatile uint32_t switch_poll_count;
+    volatile uint32_t switch_rcc_cr;
+    volatile uint32_t switch_rcc_cfgr;
+    volatile uint32_t switch_flash_acr;
+    volatile uint32_t switch_systick_load;
+    volatile uint32_t switch_sysclk_hz;
 } DiagnosticState;
 
 /* Global, non-static symbol: locate it in the ELF with arm-none-eabi-nm. */
@@ -276,11 +285,103 @@ int main(void)
         g_diag.pll_rcc_cr = RCC->CR;
     }
 
-    /* Capture final state. SYSCLK must still report HSI (SWS=00). */
+    /* Capture Stage 2A result before attempting any clock switch. */
     g_diag.pll_rcc_cr = RCC->CR;
     g_diag.pll_rcc_pllcfgr = RCC->PLLCFGR;
     g_diag.pll_rcc_cfgr = RCC->CFGR;
     g_diag.pll_flash_acr = FLASH->ACR;
+
+    /*
+     * Stage 2B: switch SYSCLK to the proven, HSI-sourced 96 MHz PLL.
+     * This deliberately does NOT use HSE as PLL source because the exact
+     * board HSE frequency has not yet been identified. HSE stays enabled.
+     *
+     * At 96 MHz and the measured ~3.24 V supply, use 3 Flash wait states.
+     * AHB = 96 MHz, APB1 = 48 MHz (/2), APB2 = 96 MHz (/1).
+     * HSI remains ON as the fallback clock. All waits are bounded.
+     */
+    g_diag.switch_result = 0UL;
+    g_diag.switch_poll_count = 0UL;
+    g_diag.switch_sysclk_hz = 0UL;
+
+    if (g_diag.pll_result == 1UL &&
+        (RCC->CR & RCC_CR_PLLRDY) != 0UL &&
+        (RCC->PLLCFGR & (1UL << 22)) == 0UL)
+    {
+        /* Prepare bus dividers while still running from HSI. */
+        RCC->CFGR = (RCC->CFGR & ~((0xFUL << 4) | (7UL << 10) | (7UL << 13)))
+                  | (4UL << 10); /* APB1 /2; AHB and APB2 /1 */
+        while ((RCC->CFGR & ((0xFUL << 4) | (7UL << 10) | (7UL << 13))) !=
+               (4UL << 10))
+        {
+            __NOP();
+        }
+
+        /* 96 MHz requires 3 wait states at this supply range. */
+        FLASH->ACR = (FLASH->ACR & ~0xFUL) | 3UL | (1UL << 8) |
+                     (1UL << 9) | (1UL << 10);
+        __DSB();
+        __ISB();
+
+        /* Request PLL as SYSCLK. */
+        RCC->CFGR = (RCC->CFGR & ~3UL) | 2UL;
+        g_diag.switch_poll_count = 0UL;
+        while (((RCC->CFGR >> 2) & 3UL) != 2UL &&
+               g_diag.switch_poll_count < 1000000UL)
+        {
+            ++g_diag.switch_poll_count;
+            __NOP();
+        }
+
+        if (((RCC->CFGR >> 2) & 3UL) == 2UL)
+        {
+            g_diag.switch_result = 1UL;
+            g_diag.switch_sysclk_hz = 96000000UL;
+            g_diag.clock_hz = 96000000UL;
+            SysTick->LOAD = (96000000UL / 1000UL) - 1UL;
+            SysTick->VAL = 0UL;
+            g_diag.switch_systick_load = SysTick->LOAD;
+        }
+        else
+        {
+            /* PLL switch timed out: request HSI fallback, bounded wait. */
+            RCC->CFGR = (RCC->CFGR & ~3UL);
+            g_diag.switch_poll_count = 0UL;
+            while (((RCC->CFGR >> 2) & 3UL) != 0UL &&
+                   g_diag.switch_poll_count < 1000000UL)
+            {
+                ++g_diag.switch_poll_count;
+                __NOP();
+            }
+
+            if (((RCC->CFGR >> 2) & 3UL) == 0UL)
+            {
+                g_diag.switch_result = 2UL;
+                g_diag.switch_sysclk_hz = HSI_VALUE;
+                g_diag.clock_hz = HSI_VALUE;
+                FLASH->ACR = (FLASH->ACR & ~0xFUL);
+                RCC->CFGR &= ~((7UL << 10) | (7UL << 13));
+                SysTick->LOAD = (HSI_VALUE / 1000UL) - 1UL;
+                SysTick->VAL = 0UL;
+                g_diag.switch_systick_load = SysTick->LOAD;
+            }
+            else
+            {
+                /* Could not confirm HSI fallback; retain fault-visible state. */
+                g_diag.switch_result = 3UL;
+            }
+        }
+    }
+    else
+    {
+        /* Never request PLL SYSCLK unless Stage 2A proved PLL lock. */
+        g_diag.switch_result = 4UL;
+        g_diag.switch_sysclk_hz = HSI_VALUE;
+    }
+
+    g_diag.switch_rcc_cr = RCC->CR;
+    g_diag.switch_rcc_cfgr = RCC->CFGR;
+    g_diag.switch_flash_acr = FLASH->ACR;
 
     g_diag.status = DIAG_STATUS_RUNNING;
 
