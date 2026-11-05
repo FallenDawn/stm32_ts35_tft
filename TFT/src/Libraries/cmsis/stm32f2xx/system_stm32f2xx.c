@@ -143,7 +143,11 @@
 /*!< Uncomment the following line if you need to relocate your vector Table in
      Internal SRAM. */
 /* #define VECT_TAB_SRAM */
-#define VECT_TAB_OFFSET  0x00 /*!< Vector Table base offset field. 
+#if defined(JZ_TS35_V2_1)
+#define VECT_TAB_OFFSET  0x8000 /*!< JZ-TS35 application vector table follows the 32 KiB IAP region. */
+#else
+#define VECT_TAB_OFFSET  0x00 /*!< Vector Table base offset field. */
+#endif 
                                    This value must be a multiple of 0x200. */
 
 
