@@ -111,7 +111,7 @@ bool IsRootDir(void)
 }
 
 // Volume exist detect
-static bool volumeSrcStatus[FF_VOLUMES] = {false, false};
+static bool volumeSrcStatus[FF_VOLUMES] = {false};
 
 bool isVolumeExist(u8 src)
 {
@@ -119,7 +119,11 @@ bool isVolumeExist(u8 src)
   return volumeSrcStatus[src];
 }
 
+#if defined(U_DISK_SUPPROT)
 uint8_t (*volumeInserted[FF_VOLUMES])(void) = {SD_CD_Inserted, USBH_USR_Inserted};
+#else
+uint8_t (*volumeInserted[FF_VOLUMES])(void) = {SD_CD_Inserted};
+#endif
 
 void loopVolumeSource(void)
 {   
@@ -127,8 +131,12 @@ void loopVolumeSource(void)
   {     
     if(volumeSrcStatus[i] != (*volumeInserted[i])())
     {
-      const int16_t labelSDStates[FF_VOLUMES][2] = {{LABEL_TFTSD_REMOVED,  LABEL_TFTSD_INSERTED},
-                                                  {LABEL_U_DISK_REMOVED, LABEL_U_DISK_INSERTED}};
+      #if defined(U_DISK_SUPPROT)
+      const int16_t labelSDStates[FF_VOLUMES][2] = {{LABEL_TFTSD_REMOVED, LABEL_TFTSD_INSERTED},
+                                                   {LABEL_U_DISK_REMOVED, LABEL_U_DISK_INSERTED}};
+      #else
+      const int16_t labelSDStates[FF_VOLUMES][2] = {{LABEL_TFTSD_REMOVED, LABEL_TFTSD_INSERTED}};
+      #endif
       volumeSrcStatus[i] = (*volumeInserted[i])();
       volumeReminderMessage(labelSDStates[i][volumeSrcStatus[i]], STATUS_NORMAL);
     }
