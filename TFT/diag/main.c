@@ -112,12 +112,12 @@ static void Fault_Capture(uint32_t *stack_frame, uint32_t fault_type)
     void handler_name(void)                                            \
     {                                                                  \
         __asm volatile (                                               \
-            "tst lr, #4          \\n"                                   \
-            "ite eq              \\n"                                   \
-            "mrseq r0, msp        \\n"                                   \
-            "mrsne r0, psp        \\n"                                   \
-            "movs r1, #" STRINGIFY(fault_code) "\\n"                   \
-            "b Fault_Capture      \\n");                                \
+            "tst lr, #4          \n"                                   \
+            "ite eq              \n"                                   \
+            "mrseq r0, msp        \n"                                   \
+            "mrsne r0, psp        \n"                                   \
+            "movs r1, #" STRINGIFY(fault_code) "\n"                   \
+            "b Fault_Capture      \n");                                \
     }
 
 DEFINE_FAULT_HANDLER(HardFault_Handler, 1)
