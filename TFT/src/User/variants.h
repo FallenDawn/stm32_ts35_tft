@@ -29,7 +29,7 @@
   #define F_CPUM 72
   #define STM32F10X_CL
   #include "stm32f10x.h"
-#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define VECT_TAB_FLASH 0x08008000
   #define HSE_VALUE ((uint32_t)8000000) //8Mhz
   #define F_CPUM 120
@@ -48,6 +48,10 @@
   #define RM68042
   #define STM32_HAS_FSMC
   #define LCD_DATA_16BIT 0
+#elif defined(JZ_TS35_V2_1)
+  #define ILI9486L
+  #define STM32_HAS_FSMC
+  #define LCD_DATA_16BIT 1
 #elif defined(TFT35_V1_2) || defined(TFT35_V2_0) || defined(TFT35_V3_0) 
   #define ILI9488
   #define STM32_HAS_FSMC
