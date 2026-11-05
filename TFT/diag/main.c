@@ -76,7 +76,7 @@ typedef struct
     volatile uint32_t pll_expected_sysclk_hz;
 
     /* Stage 2B: bounded SYSCLK switch to the already-locked 96 MHz PLL. */
-    volatile uint32_t switch_result;       /* 0=pending, 1=PLL, 2=PLL timeout, 3=HSI fallback */
+    volatile uint32_t switch_result;       /* 0=pending, 1=PLL, 2=PLL timeout/HSI restored, 3=fallback unconfirmed, 4=PLL test skipped */
     volatile uint32_t switch_poll_count;
     volatile uint32_t switch_rcc_cr;
     volatile uint32_t switch_rcc_cfgr;
@@ -311,12 +311,6 @@ int main(void)
         /* Prepare bus dividers while still running from HSI. */
         RCC->CFGR = (RCC->CFGR & ~((0xFUL << 4) | (7UL << 10) | (7UL << 13)))
                   | (4UL << 10); /* APB1 /2; AHB and APB2 /1 */
-        while ((RCC->CFGR & ((0xFUL << 4) | (7UL << 10) | (7UL << 13))) !=
-               (4UL << 10))
-        {
-            __NOP();
-        }
-
         /* 96 MHz requires 3 wait states at this supply range. */
         FLASH->ACR = (FLASH->ACR & ~0xFUL) | 3UL | (1UL << 8) |
                      (1UL << 9) | (1UL << 10);
