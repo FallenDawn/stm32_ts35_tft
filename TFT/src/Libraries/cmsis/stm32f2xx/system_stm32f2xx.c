@@ -148,7 +148,7 @@
 #else
 #define VECT_TAB_OFFSET  0x00 /*!< Vector Table base offset field. */
 #endif 
-                                   This value must be a multiple of 0x200. */
+/* VECT_TAB_OFFSET must be a multiple of 0x200. */
 
 
 /* PLL_VCO = (HSE_VALUE or HSI_VALUE / PLL_M) * PLL_N */
