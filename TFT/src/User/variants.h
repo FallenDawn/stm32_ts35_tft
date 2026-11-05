@@ -1,7 +1,9 @@
 #ifndef _VARIANTS_H_
 #define _VARIANTS_H_
 
+#if !defined(USE_HAL_DRIVER)
 #define USE_STDPERIPH_DRIVER
+#endif /* !USE_HAL_DRIVER */
 /*
 * hardware source
 * TIM4 for os timer
