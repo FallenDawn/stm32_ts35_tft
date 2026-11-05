@@ -59,6 +59,14 @@ void W25Qxx_WaitForWriteEnd(void)
 //��ҳд
 void W25Qxx_WritePage(uint8_t* pBuffer, uint32_t WriteAddr, uint16_t NumByteToWrite)
 {
+#if defined(W25QXX_FLASH_CAPACITY)
+  if (pBuffer == NULL || NumByteToWrite == 0 ||
+      NumByteToWrite > W25QXX_SPI_PAGESIZE ||
+      WriteAddr > W25QXX_FLASH_CAPACITY ||
+      NumByteToWrite > W25QXX_FLASH_CAPACITY - WriteAddr ||
+      (WriteAddr % W25QXX_SPI_PAGESIZE) + NumByteToWrite > W25QXX_SPI_PAGESIZE)
+    return;
+#endif
   W25Qxx_WriteEnable();
   W25Qxx_SPI_CS_Set(0);
 	
@@ -80,6 +88,11 @@ void W25Qxx_WritePage(uint8_t* pBuffer, uint32_t WriteAddr, uint16_t NumByteToWr
 //��FLASH�з���buffer������
 void W25Qxx_WriteBuffer(uint8_t* pBuffer, uint32_t WriteAddr, uint16_t NumByteToWrite)
 {
+#if defined(W25QXX_FLASH_CAPACITY)
+  if (pBuffer == NULL || WriteAddr > W25QXX_FLASH_CAPACITY ||
+      NumByteToWrite > W25QXX_FLASH_CAPACITY - WriteAddr)
+    return;
+#endif
   uint8_t NumOfPage = 0, NumOfSingle = 0, Addr = 0, count = 0, temp = 0;
 
   Addr = WriteAddr % W25QXX_SPI_PAGESIZE;//������һҳ���ĸ���ַ��ʼд����
@@ -151,6 +164,11 @@ void W25Qxx_WriteBuffer(uint8_t* pBuffer, uint32_t WriteAddr, uint16_t NumByteTo
 /*��FLASH�ж�����*/
 void W25Qxx_ReadBuffer(uint8_t* pBuffer, uint32_t ReadAddr, uint16_t NumByteToRead)
 {
+#if defined(W25QXX_FLASH_CAPACITY)
+  if (pBuffer == NULL || ReadAddr > W25QXX_FLASH_CAPACITY ||
+      NumByteToRead > W25QXX_FLASH_CAPACITY - ReadAddr)
+    return;
+#endif
   W25Qxx_SPI_CS_Set(0);
 
   W25Qxx_SPI_Read_Write_Byte(CMD_READ_DATA);
@@ -188,6 +206,11 @@ uint32_t W25Qxx_ReadID(void)
 //��������
 void W25Qxx_EraseSector(uint32_t SectorAddr)
 {
+#if defined(W25QXX_FLASH_CAPACITY)
+  if (SectorAddr > W25QXX_FLASH_CAPACITY - W25QXX_SECTOR_SIZE ||
+      (SectorAddr % W25QXX_SECTOR_SIZE) != 0)
+    return;
+#endif
   W25Qxx_WriteEnable();
 
   W25Qxx_SPI_CS_Set(0);
@@ -203,6 +226,11 @@ void W25Qxx_EraseSector(uint32_t SectorAddr)
 //�����
 void W25Qxx_EraseBlock(uint32_t BlockAddr)
 {
+#if defined(W25QXX_FLASH_CAPACITY)
+  if (BlockAddr > W25QXX_FLASH_CAPACITY - 0x10000UL ||
+      (BlockAddr % 0x10000UL) != 0)
+    return;
+#endif
   W25Qxx_WriteEnable();
 	
   W25Qxx_SPI_CS_Set(0);
