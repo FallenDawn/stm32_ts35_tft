@@ -1,0 +1,66 @@
+name: JZ-TS35 minimal runtime diagnostic
+
+on:
+  push:
+    branches:
+      - port/jz-ts35-v2-1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PlatformIO
+        run: python -m pip install platformio==6.2.0
+
+      - name: Build minimal STM32F207 diagnostic firmware
+        run: pio run -e JZ_TS35_DIAG
+
+      - name: Generate HEX, BIN and debug symbol report
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_dir=".pio/build/JZ_TS35_DIAG"
+          elf="$(find "$build_dir" -maxdepth 1 -type f -name '*.elf' -print -quit)"
+          test -n "$elf"
+
+          toolchain="$HOME/.platformio/packages/toolchain-gccarmnoneeabi/bin"
+          objcopy="$toolchain/arm-none-eabi-objcopy"
+          nm="$toolchain/arm-none-eabi-nm"
+          objdump="$toolchain/arm-none-eabi-objdump"
+          test -x "$objcopy"
+          test -x "$nm"
+          test -x "$objdump"
+
+          "$objcopy" -O ihex "$elf" "$build_dir/JZ-TS35-DIAG.hex"
+          "$objcopy" -O binary "$elf" "$build_dir/JZ-TS35-DIAG.bin"
+          "$nm" -n "$elf" > "$build_dir/JZ-TS35-DIAG.symbols.txt"
+          "$objdump" -h "$elf" > "$build_dir/JZ-TS35-DIAG.sections.txt"
+
+          echo "=== Diagnostic symbols ==="
+          grep -E 'g_diag|SysTick_Handler|HardFault_Handler|Fault_Capture|Reset_Handler| main$' "$build_dir/JZ-TS35-DIAG.symbols.txt" || true
+          echo "=== ELF sections ==="
+          cat "$build_dir/JZ-TS35-DIAG.sections.txt"
+
+      - name: Upload diagnostic firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: JZ-TS35-STM32F207-MINIMAL-DIAGNOSTIC
+          if-no-files-found: error
+          path: |
+            .pio/build/JZ_TS35_DIAG/*.elf
+            .pio/build/JZ_TS35_DIAG/JZ-TS35-DIAG.hex
+            .pio/build/JZ_TS35_DIAG/JZ-TS35-DIAG.bin
+            .pio/build/JZ_TS35_DIAG/JZ-TS35-DIAG.symbols.txt
+            .pio/build/JZ_TS35_DIAG/JZ-TS35-DIAG.sections.txt
