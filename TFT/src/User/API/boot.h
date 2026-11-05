@@ -4,7 +4,6 @@
 #include "variants.h"
 #include "stdbool.h"
 
-#define W25QXX_SECTOR_SIZE (0x1000) // 4096-4K
 
 //address in spiflash W25Qxx
 #define LOGO_ADDR               0x0
