@@ -64,6 +64,16 @@ typedef struct
     volatile uint32_t hse_result;          /* 0=pending, 1=ready, 2=timeout */
     volatile uint32_t hse_poll_count;
     volatile uint32_t hse_rcc_cr;
+
+    /* Stage 2A: test PLL lock from known 16 MHz HSI; SYSCLK stays on HSI. */
+    volatile uint32_t pll_result;       /* 0=pending, 1=ready, 2=timeout */
+    volatile uint32_t pll_poll_count;
+    volatile uint32_t pll_rcc_cr;
+    volatile uint32_t pll_rcc_pllcfgr;
+    volatile uint32_t pll_rcc_cfgr;
+    volatile uint32_t pll_flash_acr;
+    volatile uint32_t pll_expected_vco_hz;
+    volatile uint32_t pll_expected_sysclk_hz;
 } DiagnosticState;
 
 /* Global, non-static symbol: locate it in the ELF with arm-none-eabi-nm. */
@@ -207,6 +217,70 @@ int main(void)
         RCC->CR &= ~RCC_CR_HSEON;
         g_diag.hse_rcc_cr = RCC->CR;
     }
+
+    /*
+     * Stage 2A: validate PLL lock using the known HSI source only.
+     * Current RCC_PLLCFGR observed on this board is 0x24003010:
+     * PLLM=16, PLLN=192, PLLP=2, PLLSRC=HSI, PLLQ=5.
+     * HSI 16 MHz -> PLL input 1 MHz -> VCO 192 MHz -> PLLP output 96 MHz.
+     * Do NOT switch SYSCLK: it remains HSI at 16 MHz, so Flash latency and
+     * bus prescalers are intentionally unchanged. PLL lock wait is bounded.
+     */
+    g_diag.pll_result = 0UL;
+    g_diag.pll_poll_count = 0UL;
+    g_diag.pll_expected_vco_hz = 192000000UL;
+    g_diag.pll_expected_sysclk_hz = 96000000UL;
+
+    /* Ensure PLL is disabled before changing PLLCFGR. */
+    RCC->CR &= ~RCC_CR_PLLON;
+    while ((RCC->CR & RCC_CR_PLLRDY) != 0UL &&
+           g_diag.pll_poll_count < 100000UL)
+    {
+        ++g_diag.pll_poll_count;
+        __NOP();
+    }
+
+    if ((RCC->CR & RCC_CR_PLLRDY) == 0UL)
+    {
+        /* Explicit HSI-sourced configuration; never assume board HSE MHz. */
+        RCC->PLLCFGR = (16UL) | (192UL << 6) | (0UL << 16) |
+                       (0UL << 22) | (5UL << 24);
+        g_diag.pll_rcc_pllcfgr = RCC->PLLCFGR;
+        g_diag.pll_poll_count = 0UL;
+        RCC->CR |= RCC_CR_PLLON;
+
+        while ((RCC->CR & RCC_CR_PLLRDY) == 0UL &&
+               g_diag.pll_poll_count < 1000000UL)
+        {
+            ++g_diag.pll_poll_count;
+            __NOP();
+        }
+
+        g_diag.pll_rcc_cr = RCC->CR;
+        g_diag.pll_rcc_cfgr = RCC->CFGR;
+        g_diag.pll_flash_acr = FLASH->ACR;
+
+        if ((RCC->CR & RCC_CR_PLLRDY) != 0UL)
+        {
+            g_diag.pll_result = 1UL;
+        }
+        else
+        {
+            g_diag.pll_result = 2UL;
+            RCC->CR &= ~RCC_CR_PLLON;
+        }
+    }
+    else
+    {
+        g_diag.pll_result = 3UL; /* PLL failed to stop; config not modified */
+        g_diag.pll_rcc_cr = RCC->CR;
+    }
+
+    /* Capture final state. SYSCLK must still report HSI (SWS=00). */
+    g_diag.pll_rcc_cr = RCC->CR;
+    g_diag.pll_rcc_pllcfgr = RCC->PLLCFGR;
+    g_diag.pll_rcc_cfgr = RCC->CFGR;
+    g_diag.pll_flash_acr = FLASH->ACR;
 
     g_diag.status = DIAG_STATUS_RUNNING;
 
