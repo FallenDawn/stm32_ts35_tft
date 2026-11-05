@@ -221,7 +221,7 @@ int main(void)
     /*
      * Stage 2A: validate PLL lock using the known HSI source only.
      * Current RCC_PLLCFGR observed on this board is 0x24003010:
-     * PLLM=16, PLLN=192, PLLP=2, PLLSRC=HSI, PLLQ=5.
+     * PLLM=16, PLLN=192, PLLP=2, PLLSRC=HSI, PLLQ=4.
      * HSI 16 MHz -> PLL input 1 MHz -> VCO 192 MHz -> PLLP output 96 MHz.
      * Do NOT switch SYSCLK: it remains HSI at 16 MHz, so Flash latency and
      * bus prescalers are intentionally unchanged. PLL lock wait is bounded.
@@ -244,7 +244,7 @@ int main(void)
     {
         /* Explicit HSI-sourced configuration; never assume board HSE MHz. */
         RCC->PLLCFGR = (16UL) | (192UL << 6) | (0UL << 16) |
-                       (0UL << 22) | (5UL << 24);
+                       (0UL << 22) | (4UL << 24);
         g_diag.pll_rcc_pllcfgr = RCC->PLLCFGR;
         g_diag.pll_poll_count = 0UL;
         RCC->CR |= RCC_CR_PLLON;
