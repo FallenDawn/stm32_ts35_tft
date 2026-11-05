@@ -60,7 +60,7 @@ void W25Qxx_WaitForWriteEnd(void)
 void W25Qxx_WritePage(uint8_t* pBuffer, uint32_t WriteAddr, uint16_t NumByteToWrite)
 {
 #if defined(W25QXX_FLASH_CAPACITY)
-  if (pBuffer == NULL || NumByteToWrite == 0 ||
+  if (pBuffer == 0 || NumByteToWrite == 0 ||
       NumByteToWrite > W25QXX_SPI_PAGESIZE ||
       WriteAddr > W25QXX_FLASH_CAPACITY ||
       NumByteToWrite > W25QXX_FLASH_CAPACITY - WriteAddr ||
@@ -89,7 +89,7 @@ void W25Qxx_WritePage(uint8_t* pBuffer, uint32_t WriteAddr, uint16_t NumByteToWr
 void W25Qxx_WriteBuffer(uint8_t* pBuffer, uint32_t WriteAddr, uint16_t NumByteToWrite)
 {
 #if defined(W25QXX_FLASH_CAPACITY)
-  if (pBuffer == NULL || WriteAddr > W25QXX_FLASH_CAPACITY ||
+  if (pBuffer == 0 || WriteAddr > W25QXX_FLASH_CAPACITY ||
       NumByteToWrite > W25QXX_FLASH_CAPACITY - WriteAddr)
     return;
 #endif
@@ -207,7 +207,7 @@ uint32_t W25Qxx_ReadID(void)
 void W25Qxx_EraseSector(uint32_t SectorAddr)
 {
 #if defined(W25QXX_FLASH_CAPACITY)
-  if (SectorAddr > W25QXX_FLASH_CAPACITY - W25QXX_SECTOR_SIZE ||
+  if (SectorAddr > W25QXX_FLASH_CAPACITY - 0x1000UL ||
       (SectorAddr % W25QXX_SECTOR_SIZE) != 0)
     return;
 #endif
