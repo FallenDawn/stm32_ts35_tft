@@ -104,18 +104,20 @@ static void Fault_Capture(uint32_t *stack_frame, uint32_t fault_type)
     }
 }
 
+#define STRINGIFY_INNER(value) #value
+#define STRINGIFY(value) STRINGIFY_INNER(value)
+
 #define DEFINE_FAULT_HANDLER(handler_name, fault_code)                 \
     void handler_name(void) __attribute__((naked));                    \
     void handler_name(void)                                            \
     {                                                                  \
         __asm volatile (                                               \
-            "tst lr, #4          \n"                                   \
-            "ite eq              \n"                                   \
-            "mrseq r0, msp        \n"                                   \
-            "mrsne r0, psp        \n"                                   \
-            "movs r1, %0          \n"                                   \
-            "b Fault_Capture      \n"                                   \
-            : : "I" (fault_code) : "r0", "r1", "memory");               \
+            "tst lr, #4          \\n"                                   \
+            "ite eq              \\n"                                   \
+            "mrseq r0, msp        \\n"                                   \
+            "mrsne r0, psp        \\n"                                   \
+            "movs r1, #" STRINGIFY(fault_code) "\\n"                   \
+            "b Fault_Capture      \\n");                                \
     }
 
 DEFINE_FAULT_HANDLER(HardFault_Handler, 1)
