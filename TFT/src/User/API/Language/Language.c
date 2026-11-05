@@ -2174,6 +2174,11 @@ const char *const du_pack[LABEL_NUM]={
 
 u8 * textSelect(u8 sel)
 {
+#if defined(JZ_TS35_V2_1)
+  // The 4 MiB W25Q32 layout intentionally omits the original 4.5 MiB GBK font.
+  // Keep the JZ UI readable even if old settings request a non-ASCII language.
+  return (u8 *)en_pack[sel];
+#else
   switch(infoSettings.language)
   {
     case ENGLISH:     return (u8 *)en_pack[sel];
@@ -2193,4 +2198,5 @@ u8 * textSelect(u8 sel)
 
     default:        return NULL;
   }
+#endif
 }
