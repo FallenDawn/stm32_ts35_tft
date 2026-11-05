@@ -2,7 +2,7 @@ import os
 
 Import("env")
 
-# Keep the JZ-TS35 application in the 0x08008000 IAP layout.
+# Direct boot: vectors at 0x08000000, app code at 0x08008000, settings sector preserved at 0x08004000.
 custom_ld_script = os.path.abspath("buildroot/ldscripts/jz_ts35_v2_1_0x8000.ld")
 linkflags = list(env.get("LINKFLAGS", []))
 script_flag_found = False
