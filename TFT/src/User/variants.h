@@ -2,7 +2,9 @@
 #define _VARIANTS_H_
 
 #if !defined(USE_HAL_DRIVER)
-#define USE_STDPERIPH_DRIVER
+#ifndef USE_STDPERIPH_DRIVER
+  #define USE_STDPERIPH_DRIVER
+#endif
 #endif /* !USE_HAL_DRIVER */
 /*
 * hardware source
