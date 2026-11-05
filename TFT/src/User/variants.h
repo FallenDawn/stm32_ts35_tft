@@ -33,10 +33,19 @@
   #define F_CPUM 72
   #define STM32F10X_CL
   #include "stm32f10x.h"
-#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(JZ_TS35_V2_1)
+  // Direct-boot vector table at flash base; application code starts after the settings sector.
+  #define VECT_TAB_FLASH 0x08000000
+  #ifndef HSE_VALUE
+    #define HSE_VALUE ((uint32_t)8000000) //8MHz crystal, also supplied to all translation units
+  #endif
+  #define F_CPUM 120
+  #define STM32F2XX
+  #include "stm32f2xx.h"
+#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define VECT_TAB_FLASH 0x08008000
   #ifndef HSE_VALUE
-    #define HSE_VALUE ((uint32_t)8000000) //8MHz crystal, also supplied to all framework translation units
+    #define HSE_VALUE ((uint32_t)8000000)
   #endif
   #define F_CPUM 120
   #define STM32F2XX
