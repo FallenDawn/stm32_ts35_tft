@@ -1,0 +1,30 @@
+name: JZ-TS35 V2.1 firmware build
+
+on:
+  push:
+    branches:
+      - port/jz-ts35-v2-1
+  workflow_dispatch:
+
+jobs:
+  build-jz-ts35:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+      - name: Build STM32F207VCT6 + ILI9486L
+        run: pio run -e JZ_TS35_V2_1
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: JZ-TS35-V2.1-STM32F207VCT6-ILI9486L
+          path: |
+            .pio/build/JZ_TS35_V2_1/*.bin
+            .pio/build/JZ_TS35_V2_1/*.hex
+            .pio/build/JZ_TS35_V2_1/*.elf
