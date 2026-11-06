@@ -154,6 +154,10 @@ static uint8_t sd_init_and_read_sector0(void)
         if(r!=0){ g_sd_status=0x50U|r; SD_CS_HIGH(); return 0; }
         for(i=0;i<4;i++) ocr[i]=sd_spi_xfer(0xFF);
         g_sd_type=(ocr[0]&0x40U)?2U:1U;
+        if(g_sd_type==1U){
+            r=sd_cmd(16,512,0x01);
+            if(r!=0){ g_sd_status=0x51U|r; SD_CS_HIGH(); return 0; }
+        }
     } else if(r&0x04U) {
         for(tries=0;tries<2000UL;tries++){
             (void)sd_cmd(55,0,0x01);
