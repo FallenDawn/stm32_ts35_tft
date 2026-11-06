@@ -1,117 +1,33 @@
 /*
- * JZ-TS35 V2.1 / STM32F207VCT6 minimal runtime diagnostic firmware.
+ * JZ-TS35 V2.1 - Stage 2D ILI9486L bring-up
+ * MCU: STM32F207VCT6
+ * Interface: FSMC Bank1 NORSRAM1, 16-bit 8080 parallel
  *
- * Purpose:
- *   - Verify reset vector + startup + SystemInit + main execution.
- *   - Keep SWD pins PA13/PA14 untouched.
- *   - Expose stable, named volatile symbols for SWD memory inspection.
- *   - Capture Cortex-M3 fault stack and SCB fault status.
- *
- * Stage 2C enables GPIOA-I peripheral clocks and snapshots GPIO registers
- * without changing any pin mode, pull, speed, output, or alternate function.
- * It does not initialize the TFT, SPI, touch controller, external W25Q32,
- * SD card, UART, or drive any board pin.
+ * Assumed data bus is the existing repository mapping. Control pins:
+ * PD4=NOE, PD5=NWE, PD7=NE1, PE2=A23(RS).
+ * This image deliberately keeps SYSCLK on reset-default HSI (16 MHz).
+ * It does not touch the external W25Q32, SD, touch controller or UART.
  */
 
 #include "stm32f2xx.h"
+#include <stdint.h>
 
-#define DIAG_MAGIC              0x4A5A4447UL /* "JZDG" */
-#define DIAG_VERSION            0x00010002UL
-#define DIAG_STATUS_BOOT        0x424F4F54UL /* "BOOT" */
-#define DIAG_STATUS_RUNNING     0x52554E31UL /* "RUN1" */
-#define DIAG_STATUS_FAULT       0x4641554CUL /* "FAUL" */
-#define DIAG_STATUS_SYSTICK_ERR 0x53595445UL /* "SYTE" */
-#define DIAG_STATUS_CLOCK_FAIL  0x434C4B46UL /* CLKF */
-#define DIAG_FAULT_MAGIC        0x464C5444UL /* "FLTD" */
+#define LCD_CMD_ADDR ((volatile uint16_t *)0x60FFFFFEUL)
+#define LCD_DAT_ADDR ((volatile uint16_t *)0x61000000UL)
+#define LCD_CMD(v)   (*LCD_CMD_ADDR = (uint16_t)(v))
+#define LCD_DATA(v)  (*LCD_DAT_ADDR = (uint16_t)(v))
 
-typedef struct
-{
-    volatile uint32_t magic;
-    volatile uint32_t version;
-    volatile uint32_t status;
-    volatile uint32_t boot_count;
+static volatile uint32_t g_ms;
+static volatile uint32_t g_stage2d_status;
+static volatile uint32_t g_pixels_written;
 
-    volatile uint32_t clock_hz;
-    volatile uint32_t vector_table;
-    volatile uint32_t reset_flags;
-    volatile uint32_t rcc_cr;
-    volatile uint32_t rcc_cfgr;
-    volatile uint32_t flash_acr;
+enum {
+    ST_BOOT = 0x424F4F54UL,
+    ST_FSMC_READY = 0x46534D43UL,
+    ST_LCD_INIT = 0x4C434449UL,
+    ST_FILL_DONE = 0x444F4E45UL
+};
 
-    volatile uint32_t uptime_ms;
-    volatile uint32_t heartbeat;
-    volatile uint32_t loop_counter;
-    volatile uint32_t last_heartbeat_ms;
-    volatile uint32_t systick_load;
-    volatile uint32_t systick_control;
-    volatile uint32_t systick_config_result;
-
-    volatile uint32_t fault_magic;
-    volatile uint32_t fault_type;
-    volatile uint32_t fault_r0;
-    volatile uint32_t fault_r1;
-    volatile uint32_t fault_r2;
-    volatile uint32_t fault_r3;
-    volatile uint32_t fault_r12;
-    volatile uint32_t fault_lr;
-    volatile uint32_t fault_pc;
-    volatile uint32_t fault_xpsr;
-    volatile uint32_t fault_cfsr;
-    volatile uint32_t fault_hfsr;
-    volatile uint32_t fault_dfsr;
-    volatile uint32_t fault_mmfar;
-    volatile uint32_t fault_bfar;
-    volatile uint32_t fault_loop;
-
-    /* Stage 1: bounded HSE oscillator check; SYSCLK remains on HSI. */
-    volatile uint32_t hse_result;          /* 0=pending, 1=ready, 2=timeout */
-    volatile uint32_t hse_poll_count;
-    volatile uint32_t hse_rcc_cr;
-
-    /* Stage 2A: test PLL lock from known 16 MHz HSI; SYSCLK stays on HSI. */
-    volatile uint32_t pll_result;       /* 0=pending, 1=ready, 2=timeout */
-    volatile uint32_t pll_poll_count;
-    volatile uint32_t pll_rcc_cr;
-    volatile uint32_t pll_rcc_pllcfgr;
-    volatile uint32_t pll_rcc_cfgr;
-    volatile uint32_t pll_flash_acr;
-    volatile uint32_t pll_expected_vco_hz;
-    volatile uint32_t pll_expected_sysclk_hz;
-
-    /* Stage 2B: bounded SYSCLK switch to the already-locked 96 MHz PLL. */
-    volatile uint32_t switch_result;       /* 0=pending, 1=PLL, 2=PLL timeout/HSI restored, 3=fallback unconfirmed, 4=PLL test skipped */
-    volatile uint32_t switch_poll_count;
-    volatile uint32_t switch_rcc_cr;
-    volatile uint32_t switch_rcc_cfgr;
-    volatile uint32_t switch_flash_acr;
-    volatile uint32_t switch_systick_load;
-    volatile uint32_t switch_sysclk_hz;
-
-    /* Stage 2A.5: validate safe pre-switch bus/Flash setup; SYSCLK stays HSI. */
-    volatile uint32_t preflight_result;       /* 0=pending, 1=verified, 2=readback mismatch, 3=PLL not ready */
-    volatile uint32_t preflight_rcc_cr;
-    volatile uint32_t preflight_rcc_cfgr;
-    volatile uint32_t preflight_flash_acr;
-    volatile uint32_t preflight_systick_load;
-    volatile uint32_t preflight_sysclk_hz;
-
-    /* Stage 2C: GPIO clock/read-only register snapshot; no pin configuration. */
-    volatile uint32_t gpio_ahb1enr_before;
-    volatile uint32_t gpio_ahb1enr_after;
-    volatile uint32_t gpio_snapshot_result; /* 0=pending, 1=readback OK, 2=clock readback mismatch */
-    volatile uint32_t gpio_snapshot[9][8]; /* MODER, OTYPER, OSPEEDR, PUPDR, IDR, ODR, AFRL, AFRH */
-} DiagnosticState;
-
-/* Global, non-static symbol: locate it in the ELF with arm-none-eabi-nm. */
-volatile DiagnosticState g_diag __attribute__((used, aligned(4)));
-
-/*
- * Diagnostic-only clock setup:
- * Keep the STM32F207 on its reset-default 16 MHz HSI clock.
- * Do not start HSE, PLL or PLLI2S here. The board oscillator and PLL
- * configuration are not yet verified, and this test does not need them.
- * The startup assembly calls SystemInit() before main().
- */
 void SystemInit(void)
 {
     SCB->VTOR = 0x08000000UL;
@@ -119,428 +35,153 @@ void SystemInit(void)
     __ISB();
 }
 
-static volatile uint32_t g_tick_ms;
+void SysTick_Handler(void) { ++g_ms; }
 
-void SysTick_Handler(void)
+static void delay_ms(uint32_t ms)
 {
-    ++g_tick_ms;
-    g_diag.uptime_ms = g_tick_ms;
+    uint32_t start = g_ms;
+    while ((uint32_t)(g_ms - start) < ms) __NOP();
 }
 
-static void Fault_Capture(uint32_t *stack_frame, uint32_t fault_type)
+static void gpio_af12(GPIO_TypeDef *port, uint32_t pin)
 {
-    g_diag.fault_magic = DIAG_FAULT_MAGIC;
-    g_diag.fault_type = fault_type;
-
-    if (stack_frame != 0)
-    {
-        g_diag.fault_r0   = stack_frame[0];
-        g_diag.fault_r1   = stack_frame[1];
-        g_diag.fault_r2   = stack_frame[2];
-        g_diag.fault_r3   = stack_frame[3];
-        g_diag.fault_r12  = stack_frame[4];
-        g_diag.fault_lr   = stack_frame[5];
-        g_diag.fault_pc   = stack_frame[6];
-        g_diag.fault_xpsr = stack_frame[7];
-    }
-
-    g_diag.fault_cfsr  = SCB->CFSR;
-    g_diag.fault_hfsr  = SCB->HFSR;
-    g_diag.fault_dfsr  = SCB->DFSR;
-    g_diag.fault_mmfar = SCB->MMFAR;
-    g_diag.fault_bfar  = SCB->BFAR;
-    g_diag.status = DIAG_STATUS_FAULT;
-
-    for (;;)
-    {
-        ++g_diag.fault_loop;
-        __NOP();
+    uint32_t shift = pin * 2U;
+    port->MODER = (port->MODER & ~(3UL << shift)) | (2UL << shift);
+    port->OTYPER &= ~(1UL << pin);
+    port->OSPEEDR = (port->OSPEEDR & ~(3UL << shift)) | (3UL << shift);
+    port->PUPDR &= ~(3UL << shift);
+    if (pin < 8U) {
+        port->AFR[0] = (port->AFR[0] & ~(15UL << (pin * 4U))) |
+                       (12UL << (pin * 4U));
+    } else {
+        uint32_t s = (pin - 8U) * 4U;
+        port->AFR[1] = (port->AFR[1] & ~(15UL << s)) | (12UL << s);
     }
 }
 
-#define STRINGIFY_INNER(value) #value
-#define STRINGIFY(value) STRINGIFY_INNER(value)
+static void fsmc_gpio_init(void)
+{
+    /* GPIO D/E clocks. */
+    RCC->AHB1ENR |= (1UL << 3) | (1UL << 4);
+    (void)RCC->AHB1ENR;
 
-#define DEFINE_FAULT_HANDLER(handler_name, fault_code)                 \
-    void handler_name(void) __attribute__((naked));                    \
-    void handler_name(void)                                            \
-    {                                                                  \
-        __asm volatile (                                               \
-            "tst lr, #4          \n"                                   \
-            "ite eq              \n"                                   \
-            "mrseq r0, msp        \n"                                   \
-            "mrsne r0, psp        \n"                                   \
-            "movs r1, #" STRINGIFY(fault_code) "\n"                   \
-            "b Fault_Capture      \n");                                \
+    /* FSMC D0..D3: PD14, PD15, PD0, PD1. */
+    gpio_af12(GPIOD, 14); gpio_af12(GPIOD, 15);
+    gpio_af12(GPIOD, 0);  gpio_af12(GPIOD, 1);
+
+    /* FSMC D4..D11: PE7..PE14. */
+    gpio_af12(GPIOE, 7);  gpio_af12(GPIOE, 8);
+    gpio_af12(GPIOE, 9);  gpio_af12(GPIOE, 10);
+    gpio_af12(GPIOE, 11); gpio_af12(GPIOE, 12);
+    gpio_af12(GPIOE, 13); gpio_af12(GPIOE, 14);
+
+    /* FSMC D12..D15: PE15, PD8, PD9, PD10. */
+    gpio_af12(GPIOE, 15); gpio_af12(GPIOD, 8);
+    gpio_af12(GPIOD, 9);  gpio_af12(GPIOD, 10);
+
+    /* Control: PD4=NOE, PD5=NWE, PD7=NE1, PE2=A23/RS. */
+    gpio_af12(GPIOD, 4); gpio_af12(GPIOD, 5);
+    gpio_af12(GPIOD, 7); gpio_af12(GPIOE, 2);
+}
+
+static void fsmc_init(void)
+{
+    volatile uint32_t * const FSMC_BCR1  = (volatile uint32_t *)0xA0000000UL;
+    volatile uint32_t * const FSMC_BTR1  = (volatile uint32_t *)0xA0000004UL;
+    volatile uint32_t * const FSMC_BWTR1 = (volatile uint32_t *)0xA0000104UL;
+
+    RCC->AHB3ENR |= 1UL; /* FSMC clock */
+    (void)RCC->AHB3ENR;
+
+    /* Disable bank while programming. */
+    *FSMC_BCR1 = 0UL;
+    /* Async SRAM, 16-bit, write enabled, extended read/write timing. */
+    *FSMC_BTR1 = (15UL << 8); /* read DATAST=15 HCLK */
+    *FSMC_BWTR1 = (7UL << 8); /* write DATAST=7 HCLK */
+    *FSMC_BCR1 = (1UL << 14) | (1UL << 12) | (1UL << 4) | 1UL;
+    __DSB();
+    __ISB();
+}
+
+static void lcd_write_cmd_data(uint8_t cmd, uint8_t data)
+{
+    LCD_CMD(cmd);
+    LCD_DATA(data);
+}
+
+static void lcd_init(void)
+{
+    LCD_CMD(0x01); /* Software reset */
+    delay_ms(120);
+    LCD_CMD(0x11); /* Sleep out */
+    delay_ms(120);
+
+    lcd_write_cmd_data(0x3A, 0x55); /* RGB565 */
+    LCD_CMD(0xC0); LCD_DATA(0x0E); LCD_DATA(0x0E);
+    LCD_CMD(0xC1); LCD_DATA(0x41); LCD_DATA(0x00);
+    lcd_write_cmd_data(0xC2, 0x55);
+    LCD_CMD(0xC5);
+    LCD_DATA(0x00); LCD_DATA(0x00); LCD_DATA(0x00); LCD_DATA(0x00);
+
+    LCD_CMD(0xE0);
+    LCD_DATA(0x0F); LCD_DATA(0x1F); LCD_DATA(0x1C);
+    LCD_DATA(0x0C); LCD_DATA(0x0F); LCD_DATA(0x08);
+    LCD_DATA(0x48); LCD_DATA(0x98); LCD_DATA(0x37);
+    LCD_DATA(0x0A); LCD_DATA(0x13); LCD_DATA(0x04);
+    LCD_DATA(0x11); LCD_DATA(0x0D); LCD_DATA(0x00);
+
+    LCD_CMD(0xE1);
+    LCD_DATA(0x0F); LCD_DATA(0x32); LCD_DATA(0x2E);
+    LCD_DATA(0x0B); LCD_DATA(0x0D); LCD_DATA(0x05);
+    LCD_DATA(0x47); LCD_DATA(0x75); LCD_DATA(0x37);
+    LCD_DATA(0x06); LCD_DATA(0x10); LCD_DATA(0x03);
+    LCD_DATA(0x24); LCD_DATA(0x20); LCD_DATA(0x00);
+
+    lcd_write_cmd_data(0x20, 0x00); /* Inversion off */
+    lcd_write_cmd_data(0x36, 0x28); /* Existing driver orientation/BGR */
+    LCD_CMD(0x29); /* Display on */
+    delay_ms(150);
+}
+
+static void lcd_fill(uint16_t color)
+{
+    uint32_t i;
+    LCD_CMD(0x2A);
+    LCD_DATA(0x00); LCD_DATA(0x00);
+    LCD_DATA(0x01); LCD_DATA(0x3F); /* 0..319 */
+    LCD_CMD(0x2B);
+    LCD_DATA(0x00); LCD_DATA(0x00);
+    LCD_DATA(0x01); LCD_DATA(0xDF); /* 0..479 */
+    LCD_CMD(0x2C);
+    for (i = 0; i < (320UL * 480UL); ++i) {
+        LCD_DATA(color);
+        ++g_pixels_written;
     }
-
-DEFINE_FAULT_HANDLER(HardFault_Handler, 1)
-DEFINE_FAULT_HANDLER(MemManage_Handler, 2)
-DEFINE_FAULT_HANDLER(BusFault_Handler, 3)
-DEFINE_FAULT_HANDLER(UsageFault_Handler, 4)
-DEFINE_FAULT_HANDLER(NMI_Handler, 5)
+}
 
 int main(void)
 {
-    uint32_t last_heartbeat = 0;
-
-    /* Record startup state before clearing the reset flags. */
-    g_diag.magic = DIAG_MAGIC;
-    g_diag.version = DIAG_VERSION;
-    g_diag.status = DIAG_STATUS_BOOT;
-    g_diag.boot_count = 1;
-
-    g_diag.clock_hz = HSI_VALUE;
-    g_diag.vector_table = SCB->VTOR;
-    g_diag.reset_flags = RCC->CSR;
-    g_diag.rcc_cr = RCC->CR;
-    g_diag.rcc_cfgr = RCC->CFGR;
-    g_diag.flash_acr = FLASH->ACR;
-
-    /* 1 kHz time base. No peripheral clock or GPIO setup is needed. */
-    g_diag.systick_config_result = SysTick_Config(HSI_VALUE / 1000UL);
-    g_diag.systick_load = SysTick->LOAD;
-    g_diag.systick_control = SysTick->CTRL;
-
-    /* Clear reset flags only after their value has been copied to g_diag. */
-    RCC->CSR |= (1UL << 24);
-
-    if (g_diag.systick_config_result != 0UL)
-    {
-        g_diag.status = DIAG_STATUS_SYSTICK_ERR;
-        for (;;)
-        {
-            ++g_diag.loop_counter;
-            __NOP();
-        }
+    g_stage2d_status = ST_BOOT;
+    if (SysTick_Config(HSI_VALUE / 1000UL) != 0UL) {
+        for (;;) __NOP();
     }
 
-    /*
-     * Stage 1 only: start the external high-speed oscillator and check HSERDY.
-     * Do not change SYSCLK, PLL, bus prescalers, or Flash latency here.
-     * A bounded poll guarantees a missing/bad HSE cannot hang the CPU.
-     * Keep HSE enabled on success for the later PLL validation stage.
-     */
-    g_diag.hse_result = 0UL;
-    g_diag.hse_poll_count = 0UL;
-    RCC->CR |= RCC_CR_HSEON;
+    fsmc_gpio_init();
+    fsmc_init();
+    g_stage2d_status = ST_FSMC_READY;
 
-    while ((RCC->CR & RCC_CR_HSERDY) == 0UL &&
-           g_diag.hse_poll_count < 1000000UL)
-    {
-        ++g_diag.hse_poll_count;
-        __NOP();
-    }
+    lcd_init();
+    g_stage2d_status = ST_LCD_INIT;
 
-    g_diag.hse_rcc_cr = RCC->CR;
-    if ((RCC->CR & RCC_CR_HSERDY) != 0UL)
-    {
-        g_diag.hse_result = 1UL; /* HSE ready */
-    }
-    else
-    {
-        g_diag.hse_result = 2UL; /* bounded timeout; remain on HSI */
-        RCC->CR &= ~RCC_CR_HSEON;
-        g_diag.hse_rcc_cr = RCC->CR;
-    }
+    /* Red -> green -> blue -> black, one second per screen. */
+    lcd_fill(0xF800);
+    delay_ms(1000);
+    lcd_fill(0x07E0);
+    delay_ms(1000);
+    lcd_fill(0x001F);
+    delay_ms(1000);
+    lcd_fill(0x0000);
+    g_stage2d_status = ST_FILL_DONE;
 
-    /*
-     * Stage 2A: validate PLL lock using the known HSI source only.
-     * Current RCC_PLLCFGR observed on this board is 0x24003010:
-     * PLLM=16, PLLN=192, PLLP=2, PLLSRC=HSI, PLLQ=4.
-     * HSI 16 MHz -> PLL input 1 MHz -> VCO 192 MHz -> PLLP output 96 MHz.
-     * Do NOT switch SYSCLK: it remains HSI at 16 MHz, so Flash latency and
-     * bus prescalers are intentionally unchanged. PLL lock wait is bounded.
-     */
-    g_diag.pll_result = 0UL;
-    g_diag.pll_poll_count = 0UL;
-    g_diag.pll_expected_vco_hz = 192000000UL;
-    g_diag.pll_expected_sysclk_hz = 96000000UL;
-
-    /* Ensure PLL is disabled before changing PLLCFGR. */
-    RCC->CR &= ~RCC_CR_PLLON;
-    while ((RCC->CR & RCC_CR_PLLRDY) != 0UL &&
-           g_diag.pll_poll_count < 100000UL)
-    {
-        ++g_diag.pll_poll_count;
-        __NOP();
-    }
-
-    if ((RCC->CR & RCC_CR_PLLRDY) == 0UL)
-    {
-        /* Explicit HSI-sourced configuration; never assume board HSE MHz. */
-        RCC->PLLCFGR = (16UL) | (192UL << 6) | (0UL << 16) |
-                       (0UL << 22) | (4UL << 24);
-        g_diag.pll_rcc_pllcfgr = RCC->PLLCFGR;
-        g_diag.pll_poll_count = 0UL;
-        RCC->CR |= RCC_CR_PLLON;
-
-        while ((RCC->CR & RCC_CR_PLLRDY) == 0UL &&
-               g_diag.pll_poll_count < 1000000UL)
-        {
-            ++g_diag.pll_poll_count;
-            __NOP();
-        }
-
-        g_diag.pll_rcc_cr = RCC->CR;
-        g_diag.pll_rcc_cfgr = RCC->CFGR;
-        g_diag.pll_flash_acr = FLASH->ACR;
-
-        if ((RCC->CR & RCC_CR_PLLRDY) != 0UL)
-        {
-            g_diag.pll_result = 1UL;
-        }
-        else
-        {
-            g_diag.pll_result = 2UL;
-            RCC->CR &= ~RCC_CR_PLLON;
-        }
-    }
-    else
-    {
-        g_diag.pll_result = 3UL; /* PLL failed to stop; config not modified */
-        g_diag.pll_rcc_cr = RCC->CR;
-    }
-
-    /* Capture Stage 2A result before attempting any clock switch. */
-    g_diag.pll_rcc_cr = RCC->CR;
-    g_diag.pll_rcc_pllcfgr = RCC->PLLCFGR;
-    g_diag.pll_rcc_cfgr = RCC->CFGR;
-    g_diag.pll_flash_acr = FLASH->ACR;
-
-    /*
-     * Stage 2A.5: validate the clock-switch prerequisites without switching
-     * SYSCLK. The target final clock is 96 MHz from HSI-sourced PLL.
-     *
-     * RM0033 limits: APB1 <= 30 MHz and APB2 <= 60 MHz. Therefore, at
-     * 96 MHz use APB1 /4 (24 MHz) and APB2 /2 (48 MHz), not /2 and /1.
-     * AHB remains /1. At the current HSI 16 MHz these are conservative
-     * bus clocks (APB1=4 MHz, APB2=8 MHz). Flash latency is set to 3 WS
-     * for the later 96 MHz step, but the CPU stays on HSI throughout.
-     *
-     * Crucially, SW[1:0] is never changed here and SysTick remains at 16 MHz.
-     */
-    g_diag.preflight_result = 0UL;
-    g_diag.preflight_sysclk_hz = HSI_VALUE;
-    g_diag.preflight_systick_load = SysTick->LOAD;
-
-    if (g_diag.pll_result == 1UL &&
-        (RCC->CR & RCC_CR_PLLRDY) != 0UL &&
-        (RCC->PLLCFGR & (1UL << 22)) == 0UL)
-    {
-        /* Set AHB /1, APB1 /4, APB2 /2 while SYSCLK is still HSI. */
-        RCC->CFGR = (RCC->CFGR & ~((0xFUL << 4) | (7UL << 10) | (7UL << 13)))
-                  | (5UL << 10) | (4UL << 13);
-        __DSB();
-        __ISB();
-
-        /* Prepare 3 Flash wait states and enable prefetch/I/D caches. */
-        FLASH->ACR = (FLASH->ACR & ~0xFUL) | 3UL |
-                     (1UL << 8) | (1UL << 9) | (1UL << 10);
-        __DSB();
-        __ISB();
-
-        g_diag.preflight_rcc_cr = RCC->CR;
-        g_diag.preflight_rcc_cfgr = RCC->CFGR;
-        g_diag.preflight_flash_acr = FLASH->ACR;
-        g_diag.preflight_systick_load = SysTick->LOAD;
-
-        if (((RCC->CFGR >> 2) & 3UL) == 0UL &&
-            (RCC->CFGR & 3UL) == 0UL &&
-            (RCC->CFGR & ((0xFUL << 4) | (7UL << 10) | (7UL << 13))) ==
-                ((5UL << 10) | (4UL << 13)) &&
-            (FLASH->ACR & 0xFUL) == 3UL &&
-            (FLASH->ACR & ((1UL << 8) | (1UL << 9) | (1UL << 10))) ==
-                ((1UL << 8) | (1UL << 9) | (1UL << 10)) &&
-            SysTick->LOAD == ((HSI_VALUE / 1000UL) - 1UL))
-        {
-            g_diag.preflight_result = 1UL; /* prerequisites verified */
-        }
-        else
-        {
-            g_diag.preflight_result = 2UL; /* readback mismatch */
-        }
-    }
-    else
-    {
-        g_diag.preflight_result = 3UL; /* PLL not ready; no SYSCLK change */
-        g_diag.preflight_rcc_cr = RCC->CR;
-        g_diag.preflight_rcc_cfgr = RCC->CFGR;
-        g_diag.preflight_flash_acr = FLASH->ACR;
-    }
-
-    /* Final capture: must still be HSI 16 MHz before Stage 2B. */
-    g_diag.preflight_rcc_cr = RCC->CR;
-    g_diag.preflight_rcc_cfgr = RCC->CFGR;
-    g_diag.preflight_flash_acr = FLASH->ACR;
-    g_diag.preflight_systick_load = SysTick->LOAD;
-
-    /*
-     * Stage 2B: guarded switch to the already-locked HSI-sourced 96 MHz PLL.
-     * Stage 2A.5 preflight above is retained. SysTick is stopped only during
-     * the transition and restarted only after SWS confirms the actual source.
-     */
-    g_diag.switch_result = 0UL;
-    g_diag.switch_poll_count = 0UL;
-    g_diag.switch_sysclk_hz = HSI_VALUE;
-
-    if (g_diag.preflight_result == 1UL &&
-        (RCC->CR & (RCC_CR_HSION | RCC_CR_HSIRDY |
-                    RCC_CR_PLLON | RCC_CR_PLLRDY)) ==
-                   (RCC_CR_HSION | RCC_CR_HSIRDY |
-                    RCC_CR_PLLON | RCC_CR_PLLRDY) &&
-        (RCC->PLLCFGR & 0x0F43FFFFUL) == (0x04003010UL & 0x0F43FFFFUL) &&
-        (RCC->CFGR & 0x0000FC03UL) == 0x00009400UL &&
-        (FLASH->ACR & 0x0000070FUL) == 0x00000703UL &&
-        SysTick->LOAD == ((HSI_VALUE / 1000UL) - 1UL) &&
-        (SysTick->CTRL & 7UL) == 7UL)
-    {
-        SysTick->CTRL = 0UL;
-        SCB->ICSR = (1UL << 25);
-        __DSB();
-        __ISB();
-
-        RCC->CFGR = (RCC->CFGR & ~3UL) | 2UL;
-        __DSB();
-        __ISB();
-
-        while (((RCC->CFGR >> 2) & 3UL) != 2UL &&
-               g_diag.switch_poll_count < 1000000UL)
-        {
-            ++g_diag.switch_poll_count;
-            __NOP();
-        }
-
-        g_diag.switch_rcc_cr = RCC->CR;
-        g_diag.switch_rcc_cfgr = RCC->CFGR;
-        g_diag.switch_flash_acr = FLASH->ACR;
-
-        if (((RCC->CFGR >> 2) & 3UL) == 2UL)
-        {
-            SysTick->LOAD = (96000000UL / 1000UL) - 1UL;
-            SysTick->VAL = 0UL;
-            SCB->ICSR = (1UL << 25);
-            SysTick->CTRL = 7UL;
-            __DSB();
-            __ISB();
-
-            g_diag.clock_hz = 96000000UL;
-            g_diag.switch_sysclk_hz = 96000000UL;
-            g_diag.switch_systick_load = SysTick->LOAD;
-            g_diag.switch_result = 1UL;
-        }
-        else
-        {
-            /* PLL switch timed out: request HSI and independently verify it. */
-            RCC->CFGR = (RCC->CFGR & ~3UL);
-            __DSB();
-            __ISB();
-
-            while (((RCC->CFGR >> 2) & 3UL) != 0UL &&
-                   g_diag.switch_poll_count < 2000000UL)
-            {
-                ++g_diag.switch_poll_count;
-                __NOP();
-            }
-
-            g_diag.switch_rcc_cr = RCC->CR;
-            g_diag.switch_rcc_cfgr = RCC->CFGR;
-            g_diag.switch_flash_acr = FLASH->ACR;
-
-            if (((RCC->CFGR >> 2) & 3UL) == 0UL)
-            {
-                SysTick->LOAD = (HSI_VALUE / 1000UL) - 1UL;
-                SysTick->VAL = 0UL;
-                SCB->ICSR = (1UL << 25);
-                SysTick->CTRL = 7UL;
-                __DSB();
-                __ISB();
-
-                g_diag.clock_hz = HSI_VALUE;
-                g_diag.switch_sysclk_hz = HSI_VALUE;
-                g_diag.switch_systick_load = SysTick->LOAD;
-                g_diag.switch_result = 2UL;
-            }
-            else
-            {
-                SysTick->CTRL = 0UL;
-                g_diag.switch_systick_load = SysTick->LOAD;
-                g_diag.switch_result = 3UL;
-                g_diag.status = DIAG_STATUS_CLOCK_FAIL;
-                __DSB();
-                __ISB();
-                for (;;)
-                {
-                    ++g_diag.switch_poll_count;
-                    __NOP();
-                }
-            }
-        }
-    }
-    else
-    {
-        /* Preconditions failed: do not switch; retain the verified HSI path. */
-        g_diag.switch_result = 4UL;
-        g_diag.switch_rcc_cr = RCC->CR;
-        g_diag.switch_rcc_cfgr = RCC->CFGR;
-        g_diag.switch_flash_acr = FLASH->ACR;
-        g_diag.switch_systick_load = SysTick->LOAD;
-    }
-
-    /*
-     * Stage 2C: enable only the GPIO peripheral bus clocks, then take a
-     * read-only snapshot of GPIOA..GPIOI. Enabling AHB1 GPIO clocks does not
-     * alter pin electrical state. Do not write MODER/OTYPER/OSPEEDR/PUPDR/
-     * ODR/BSRR/AFR: all pins, including SWD PA13/PA14, remain untouched.
-     */
-    {
-        GPIO_TypeDef * const ports[9] = {
-            GPIOA, GPIOB, GPIOC, GPIOD, GPIOE, GPIOF, GPIOG, GPIOH, GPIOI
-        };
-        uint32_t i;
-
-        g_diag.gpio_snapshot_result = 0UL;
-        g_diag.gpio_ahb1enr_before = RCC->AHB1ENR;
-        RCC->AHB1ENR |= 0x000001FFUL; /* GPIOA..GPIOI clocks only */
-        __DSB();
-        __ISB();
-        g_diag.gpio_ahb1enr_after = RCC->AHB1ENR;
-
-        for (i = 0UL; i < 9UL; ++i)
-        {
-            g_diag.gpio_snapshot[i][0] = ports[i]->MODER;
-            g_diag.gpio_snapshot[i][1] = ports[i]->OTYPER;
-            g_diag.gpio_snapshot[i][2] = ports[i]->OSPEEDR;
-            g_diag.gpio_snapshot[i][3] = ports[i]->PUPDR;
-            g_diag.gpio_snapshot[i][4] = ports[i]->IDR;
-            g_diag.gpio_snapshot[i][5] = ports[i]->ODR;
-            g_diag.gpio_snapshot[i][6] = ports[i]->AFR[0];
-            g_diag.gpio_snapshot[i][7] = ports[i]->AFR[1];
-        }
-
-        if ((g_diag.gpio_ahb1enr_after & 0x000001FFUL) == 0x000001FFUL)
-        {
-            g_diag.gpio_snapshot_result = 1UL;
-        }
-        else
-        {
-            g_diag.gpio_snapshot_result = 2UL;
-        }
-    }
-
-    g_diag.status = DIAG_STATUS_RUNNING;
-
-    for (;;)
-    {
-        ++g_diag.loop_counter;
-
-        if ((uint32_t)(g_tick_ms - last_heartbeat) >= 1000UL)
-        {
-            last_heartbeat += 1000UL;
-            g_diag.heartbeat++;
-            g_diag.last_heartbeat_ms = g_tick_ms;
-        }
-
-        __NOP();
-    }
+    for (;;) __WFI();
 }
