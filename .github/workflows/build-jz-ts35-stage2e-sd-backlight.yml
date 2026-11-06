@@ -31,22 +31,36 @@ jobs:
           CFLAGS="$CPU_FLAGS $DEFINES $INCLUDES -std=gnu11 -O0 -g3 -ffunction-sections -fdata-sections -fno-common -fno-builtin -fno-unwind-tables -fno-asynchronous-unwind-tables -Wall -Wextra"
           arm-none-eabi-gcc $CPU_FLAGS -x assembler-with-cpp -c TFT/src/Libraries/Startup/stm32f2xx/startup_stm32f2xx.s -o "$BUILD_DIR/startup.o"
           arm-none-eabi-gcc $CFLAGS -c TFT/diag/orientation_pattern.c -o "$BUILD_DIR/orientation_pattern.o"
-          arm-none-eabi-gcc $CPU_FLAGS -nostdlib -Wl,--gc-sections -Wl,--build-id=none -Wl,-Map="$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.map" -T buildroot/ldscripts/jz_ts35_v2_1_diag.ld "$BUILD_DIR/startup.o" "$BUILD_DIR/orientation_pattern.o" -Wl,--start-group -lgcc -Wl,--end-group -o "$BUILD_DIR/JZ-TS35-STAGE2D3-ORIENTATION.elf"
-          arm-none-eabi-objcopy -O ihex "$BUILD_DIR/JZ-TS35-STAGE2D3-ORIENTATION.elf" "$BUILD_DIR/JZ-TS35-STAGE2D3-ORIENTATION.hex"
-          arm-none-eabi-objcopy -O binary "$BUILD_DIR/JZ-TS35-STAGE2D3-ORIENTATION.elf" "$BUILD_DIR/JZ-TS35-STAGE2D3-ORIENTATION.bin"
-          arm-none-eabi-nm -n "$BUILD_DIR/JZ-TS35-STAGE2D3-ORIENTATION.elf" > "$BUILD_DIR/JZ-TS35-STAGE2D3-ORIENTATION.symbols.txt"
-          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STAGE2D3-ORIENTATION.elf"
-          grep -E 'g_stage_status|g_pixels_written|g_heartbeat| main$' "$BUILD_DIR/JZ-TS35-STAGE2D3-ORIENTATION.symbols.txt"
+          arm-none-eabi-gcc $CPU_FLAGS -nostdlib -Wl,--gc-sections -Wl,--build-id=none -Wl,-Map="$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.map" -T buildroot/ldscripts/jz_ts35_v2_1_diag.ld "$BUILD_DIR/startup.o" "$BUILD_DIR/orientation_pattern.o" -Wl,--start-group -lgcc -Wl,--end-group -o "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.elf"
+          arm-none-eabi-objcopy -O ihex "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.elf" "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.hex"
+          arm-none-eabi-objcopy -O binary "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.elf" "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.bin"
+          arm-none-eabi-nm -n "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.elf" > "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.symbols.txt"
+          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.elf"
+          grep -E 'g_stage_status|g_pixels_written|g_heartbeat|g_sd_status|g_sd_type|g_sd_r1|g_sd_token|g_sd_checksum| main "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.symbols.txt"
       - name: Upload firmware and symbols
         uses: actions/upload-artifact@v4
         with:
-          name: JZ-TS35-STM32F207-STAGE2D3-ORIENTATION
+          name: JZ-TS35-STM32F207-STAGE2E-SD-BACKLIGHT
           if-no-files-found: error
           path: |
-            .build/jz-ts35-stage2d3/JZ-TS35-STAGE2D3-ORIENTATION.elf
-            .build/jz-ts35-stage2d3/JZ-TS35-STAGE2D3-ORIENTATION.hex
-            .build/jz-ts35-stage2d3/JZ-TS35-STAGE2D3-ORIENTATION.bin
-            .build/jz-ts35-stage2d3/JZ-TS35-STAGE2D3-ORIENTATION.map
-            .build/jz-ts35-stage2d3/JZ-TS35-STAGE2D3-ORIENTATION.symbols.txt
+            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.elf
+            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.hex
+            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.bin
+            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.map
+            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.symbols.txt
+
+# Stage 2D.3 source uses explicit high-byte/low-byte address-window coordinates.
+ "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.symbols.txt"
+      - name: Upload firmware and symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: JZ-TS35-STM32F207-STAGE2E-SD-BACKLIGHT
+          if-no-files-found: error
+          path: |
+            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.elf
+            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.hex
+            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.bin
+            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.map
+            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.symbols.txt
 
 # Stage 2D.3 source uses explicit high-byte/low-byte address-window coordinates.
