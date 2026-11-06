@@ -368,7 +368,7 @@ int main(void)
     g_diag.preflight_systick_load = SysTick->LOAD;
 
     /*
-     * Stage 2B: switch SYSCLK to the already-locked HSI-sourced 96 MHz PLL.
+     * Stage 2B: guarded switch to the already-locked HSI-sourced 96 MHz PLL.
      * Stage 2A.5 preflight above is retained. SysTick is stopped only during
      * the transition and restarted only after SWS confirms the actual source.
      */
