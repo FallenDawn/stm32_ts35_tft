@@ -1,14 +1,15 @@
-name: JZ-TS35 Stage 2B guarded PLL clock switch
+name: JZ-TS35 Stage 2C read-only GPIO diagnostic
 
 on:
   push:
     branches:
       - port/jz-ts35-v2-1
       - stage2b/clock-switch-safe
+      - stage2c/gpio-readonly-baseline
   workflow_dispatch:
 
 concurrency:
-  group: jz-ts35-stage2b-clock-diagnostic
+  group: jz-ts35-stage2c-gpio-diagnostic
   cancel-in-progress: true
 
 permissions:
@@ -26,12 +27,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
 
-      - name: Compile standalone STM32F207 diagnostic firmware
+      - name: Compile standalone STM32F207 Stage 2C GPIO diagnostic firmware
         shell: bash
         run: |
           set -euo pipefail
 
-          BUILD_DIR=".build/jz-ts35-diagnostic"
+          BUILD_DIR=".build/jz-ts35-stage2c"
           mkdir -p "$BUILD_DIR"
 
           CPU_FLAGS="-mcpu=cortex-m3 -mthumb -mfloat-abi=soft"
@@ -50,7 +51,7 @@ jobs:
           arm-none-eabi-gcc $CPU_FLAGS -nostdlib \
             -Wl,--gc-sections \
             -Wl,--build-id=none \
-            -Wl,-Map="$BUILD_DIR/JZ-TS35-PLL-STAGE2B.map" \
+            -Wl,-Map="$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.map" \
             -T buildroot/ldscripts/jz_ts35_v2_1_diag.ld \
             "$BUILD_DIR/startup.o" \
             "$BUILD_DIR/diag_main.o" \
@@ -58,29 +59,31 @@ jobs:
             -o "$BUILD_DIR/JZ-TS35-DIAG.elf"
 
           arm-none-eabi-objcopy -O ihex \
-            "$BUILD_DIR/JZ-TS35-DIAG.elf" "$BUILD_DIR/JZ-TS35-DIAG.hex"
+            "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf" "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.hex"
           arm-none-eabi-objcopy -O binary \
-            "$BUILD_DIR/JZ-TS35-DIAG.elf" "$BUILD_DIR/JZ-TS35-DIAG.bin"
+            "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf" "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.bin"
           arm-none-eabi-nm -n \
-            "$BUILD_DIR/JZ-TS35-DIAG.elf" > "$BUILD_DIR/JZ-TS35-DIAG.symbols.txt"
+            "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf" > "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.symbols.txt"
           arm-none-eabi-objdump -h \
-            "$BUILD_DIR/JZ-TS35-DIAG.elf" > "$BUILD_DIR/JZ-TS35-DIAG.sections.txt"
+            "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf" > "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.sections.txt"
 
-          echo "=== Stage 2B guarded PLL switch diagnostic symbols ==="
+          echo "=== Stage 2C GPIO diagnostic symbols ==="
           grep -E 'g_diag|SysTick_Handler|HardFault_Handler|Fault_Capture|Reset_Handler| main$' \
-            "$BUILD_DIR/JZ-TS35-DIAG.symbols.txt" || true
-          echo "=== ELF sections ==="
+            "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.symbols.txt" || true
+          echo "=== ELF size ===
+          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf"
+          echo "=== ELF sections ===""
           cat "$BUILD_DIR/JZ-TS35-DIAG.sections.txt"
 
       - name: Upload diagnostic firmware and debug symbols
         uses: actions/upload-artifact@v4
         with:
-          name: JZ-TS35-STM32F207-STAGE2B-GUARDED-PLL-SWITCH
+          name: JZ-TS35-STM32F207-STAGE2C-GPIO-READONLY
           if-no-files-found: error
           path: |
-            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.elf
-            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.hex
-            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.bin
-            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.map
-            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.symbols.txt
-            .build/jz-ts35-diagnostic/JZ-TS35-DIAG.sections.txt
+            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.elf
+            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.hex
+            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.bin
+            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.map
+            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.symbols.txt
+            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.sections.txt
