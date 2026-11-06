@@ -3,7 +3,7 @@ name: JZ-TS35 Stage 2E SD SPI1 and backlight
 on:
   push:
     branches:
-      - stage2e/sd-spi1-backlight
+      - stage2e/sd-spi1-backlight-v2
   workflow_dispatch:
 
 permissions:
