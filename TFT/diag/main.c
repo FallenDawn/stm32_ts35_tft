@@ -87,14 +87,14 @@ static void lcd_reset_gpio_init(void)
     GPIOD->OSPEEDR = (GPIOD->OSPEEDR & ~(3UL << (13U * 2U))) |
                      (2UL << (13U * 2U));
     GPIOD->PUPDR &= ~(3UL << (13U * 2U));
-    GPIOD->BSRR = (1UL << (13U + 16U)); /* Assert LCD reset low. */
+    GPIOD->BSRRH = (uint16_t)(1UL << 13U); /* Assert LCD reset low. */
 }
 
 static void lcd_hardware_reset(void)
 {
-    GPIOD->BSRR = (1UL << (13U + 16U)); /* RESX low */
+    GPIOD->BSRRH = (uint16_t)(1UL << 13U); /* RESX low */
     delay_ms(20U);
-    GPIOD->BSRR = (1UL << 13U);         /* RESX high */
+    GPIOD->BSRRL = (uint16_t)(1UL << 13U);         /* RESX high */
     delay_ms(120U);
     ++g_lcd_reset_count;
 }
