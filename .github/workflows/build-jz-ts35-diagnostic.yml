@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - port/jz-ts35-v2-1
+  pull_request:
+    branches:
+      - port/jz-ts35-v2-1
   workflow_dispatch:
 
 concurrency:
