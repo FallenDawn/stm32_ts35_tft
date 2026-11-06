@@ -295,7 +295,7 @@ static void w25q32_read_jedec_id(uint8_t id[3])
 
 static void uart_send_text(const char *s)
 {
-    while (*s != '\\0') {
+    while (*s != '\0') {
         while ((USART3->SR & USART_SR_TXE) == 0U) __NOP();
         USART3->DR = (uint16_t)(uint8_t)*s++;
     }
@@ -384,7 +384,7 @@ int main(void)
             uart_send_text("  [FAIL: ALL ZERO]");
         else
             uart_send_text("  [CHECK: UNEXPECTED ID]");
-        uart_send_text("\\r\\n");
+        uart_send_text("\r\n");
         delay_ms(1000U);
     }
 }
