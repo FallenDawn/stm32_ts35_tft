@@ -388,7 +388,7 @@ int main(void)
         (SysTick->CTRL & 7UL) == 7UL)
     {
         SysTick->CTRL = 0UL;
-        SCB->ICSR = SCB_ICSR_PENDSTCLR;
+        SCB->ICSR = (1UL << 25);
         __DSB();
         __ISB();
 
@@ -411,7 +411,7 @@ int main(void)
         {
             SysTick->LOAD = (96000000UL / 1000UL) - 1UL;
             SysTick->VAL = 0UL;
-            SCB->ICSR = SCB_ICSR_PENDSTCLR;
+            SCB->ICSR = (1UL << 25);
             SysTick->CTRL = 7UL;
             __DSB();
             __ISB();
@@ -443,7 +443,7 @@ int main(void)
             {
                 SysTick->LOAD = (HSI_VALUE / 1000UL) - 1UL;
                 SysTick->VAL = 0UL;
-                SCB->ICSR = SCB_ICSR_PENDSTCLR;
+                SCB->ICSR = (1UL << 25);
                 SysTick->CTRL = 7UL;
                 __DSB();
                 __ISB();
