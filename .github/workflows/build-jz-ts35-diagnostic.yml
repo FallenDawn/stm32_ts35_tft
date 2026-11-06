@@ -5,11 +5,11 @@ on:
     branches:
       - stage2c/gpio-readonly-baseline
       - stage2d/ili9486l-bringup
-      - stage2d1/ili9486l-wiring-corrected
+      - stage2d1/ili9486l-wiring-corrected`n      - stage2d2/fsmc-observable
   workflow_dispatch:
 
 concurrency:
-  group: jz-ts35-stage2d-ili9486l
+  group: jz-ts35-stage2d-observable
   cancel-in-progress: true
 
 permissions:
@@ -51,39 +51,40 @@ jobs:
           arm-none-eabi-gcc $CPU_FLAGS -nostdlib \
             -Wl,--gc-sections \
             -Wl,--build-id=none \
-            -Wl,-Map="$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.map" \
+            -Wl,-Map="$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.map" \
             -T buildroot/ldscripts/jz_ts35_v2_1_diag.ld \
             "$BUILD_DIR/startup.o" \
             "$BUILD_DIR/diag_main.o" \
             -Wl,--start-group -lgcc -Wl,--end-group \
-            -o "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf"
+            -o "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.elf"
 
           arm-none-eabi-objcopy -O ihex \
-            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.hex"
+            "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.elf" "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.hex"
           arm-none-eabi-objcopy -O binary \
-            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.bin"
+            "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.elf" "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.bin"
           arm-none-eabi-nm -n \
-            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" > "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.symbols.txt"
+            "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.elf" > "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.symbols.txt"
           arm-none-eabi-objdump -h \
-            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" > "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.sections.txt"
+            "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.elf" > "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.sections.txt"
 
           echo "=== Stage 2D symbols ==="
-          grep -E 'g_stage2d_status|g_pixels_written|SysTick_Handler|Reset_Handler| main$' \
-            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.symbols.txt"
+          grep -E 'g_stage_status|g_lcd_reset_count|g_fsmc_write_count|g_lcd_command_count|g_lcd_data_count|g_pixels_written|g_last_lcd_command|g_last_lcd_data|g_error_code|g_heartbeat|g_loop_counter|SysTick_Handler|Reset_Handler| main$' \
+            "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.symbols.txt"
           echo "=== ELF size ==="
-          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf"
+          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.elf"
           echo "=== ELF sections ==="
-          cat "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.sections.txt"
+          cat "$BUILD_DIR/JZ-TS35-STAGE2D-OBSERVABLE.sections.txt"
 
       - name: Upload Stage 2D firmware and debug symbols
         uses: actions/upload-artifact@v4
         with:
-          name: JZ-TS35-STM32F207-STAGE2D-ILI9486L
+          name: JZ-TS35-STM32F207-STAGE2D-OBSERVABLE
           if-no-files-found: error
           path: |
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.elf
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.hex
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.bin
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.map
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.symbols.txt
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.sections.txt
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-OBSERVABLE.elf
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-OBSERVABLE.hex
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-OBSERVABLE.bin
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-OBSERVABLE.map
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-OBSERVABLE.symbols.txt
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-OBSERVABLE.sections.txt
+
