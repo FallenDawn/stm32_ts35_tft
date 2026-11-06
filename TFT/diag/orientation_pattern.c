@@ -1,7 +1,8 @@
 /*
- * JZ-TS35 V2.1 - Stage 2D.3 orientation / offset diagnostic
+ * JZ-TS35 V2.1 - Stage 2E SD SPI1 + backlight diagnostic
  * STM32F207VCT6 + ILI9486L, confirmed FSMC wiring only.
- * Does not touch unknown FPC pins or backlight GPIOs.
+ * Backlight test: PD12 high (active-high candidate).
+ * SD test: SPI1 PA4/PA5/PA6/PA7, read-only initialization and sector-0 read.
  *
  * Portrait address window: X=0..319, Y=0..479.
  * MADCTL 0x08 keeps BGR and clears MV (row/column exchange).
@@ -28,6 +29,12 @@ volatile uint32_t g_last_lcd_data;
 volatile uint32_t g_error_code;
 volatile uint32_t g_heartbeat;
 volatile uint32_t g_loop_counter;
+volatile uint32_t g_sd_status;
+volatile uint32_t g_sd_type;
+volatile uint32_t g_sd_r1;
+volatile uint32_t g_sd_token;
+volatile uint32_t g_sd_checksum;
+static uint8_t g_sd_sector0[512];
 
 enum {
     ST_BOOT       = 0x424F4F54UL,
@@ -59,6 +66,128 @@ static void delay_ms(uint32_t ms)
     uint32_t start = g_ms;
     while ((uint32_t)(g_ms - start) < ms) __NOP();
 }
+
+
+static void backlight_init(void)
+{
+    RCC->AHB1ENR |= (1UL << 3);
+    (void)RCC->AHB1ENR;
+    GPIOD->MODER = (GPIOD->MODER & ~(3UL << 24)) | (1UL << 24);
+    GPIOD->OTYPER &= ~(1UL << 12);
+    GPIOD->OSPEEDR = (GPIOD->OSPEEDR & ~(3UL << 24)) | (2UL << 24);
+    GPIOD->PUPDR &= ~(3UL << 24);
+    GPIOD->BSRRL = (uint16_t)(1UL << 12);
+}
+
+#define SD_CS_LOW()  (GPIOA->BSRRH = (uint16_t)(1UL << 4))
+#define SD_CS_HIGH() (GPIOA->BSRRL = (uint16_t)(1UL << 4))
+static uint8_t sd_spi_xfer(uint8_t v)
+{
+    uint32_t timeout = 100000UL;
+    while (!(SPI1->SR & (1UL << 1)) && --timeout) {}
+    if (!timeout) return 0xFF;
+    *(__IO uint8_t *)&SPI1->DR = v;
+    timeout = 100000UL;
+    while (!(SPI1->SR & (1UL << 0)) && --timeout) {}
+    if (!timeout) return 0xFF;
+    return *(__IO uint8_t *)&SPI1->DR;
+}
+static void sd_spi_init(void)
+{
+    RCC->AHB1ENR |= (1UL << 0);
+    RCC->APB2ENR |= (1UL << 12);
+    (void)RCC->APB2ENR;
+    GPIOA->MODER = (GPIOA->MODER & ~((3UL<<8)|(3UL<<10)|(3UL<<12)|(3UL<<14))) |
+                   (1UL<<8) | (2UL<<10) | (2UL<<12) | (2UL<<14);
+    GPIOA->OTYPER &= ~((1UL<<4)|(1UL<<5)|(1UL<<6)|(1UL<<7));
+    GPIOA->OSPEEDR |= (3UL<<8)|(3UL<<10)|(3UL<<12)|(3UL<<14);
+    GPIOA->PUPDR &= ~((3UL<<8)|(3UL<<10)|(3UL<<12)|(3UL<<14));
+    GPIOA->AFR[0] = (GPIOA->AFR[0] & ~((15UL<<20)|(15UL<<24)|(15UL<<28))) |
+                   (5UL<<20) | (5UL<<24) | (5UL<<28);
+    SD_CS_HIGH();
+    SPI1->CR1 = 0;
+    SPI1->CR1 = (1UL<<2) | (7UL<<3) | (1UL<<8) | (1UL<<9);
+    SPI1->CR1 |= (1UL<<6);
+}
+static uint8_t sd_cmd(uint8_t cmd, uint32_t arg, uint8_t crc)
+{
+    uint8_t r=0xFF, i;
+    SD_CS_HIGH(); sd_spi_xfer(0xFF);
+    SD_CS_LOW(); sd_spi_xfer(0xFF);
+    sd_spi_xfer((uint8_t)(0x40U|cmd));
+    sd_spi_xfer((uint8_t)(arg>>24)); sd_spi_xfer((uint8_t)(arg>>16));
+    sd_spi_xfer((uint8_t)(arg>>8)); sd_spi_xfer((uint8_t)arg);
+    sd_spi_xfer(crc);
+    for(i=0;i<10;i++){ r=sd_spi_xfer(0xFF); if(!(r&0x80U)) break; }
+    g_sd_r1=r;
+    return r;
+}
+static uint8_t sd_wait_ready(void)
+{
+    uint32_t n;
+    for(n=0;n<200000UL;n++) if(sd_spi_xfer(0xFF)==0xFF) return 1;
+    return 0;
+}
+static uint8_t sd_init_and_read_sector0(void)
+{
+    uint8_t r, i, ocr[4], token=0xFF;
+    uint32_t tries;
+    g_sd_status=1; g_sd_type=0; g_sd_r1=0xFF; g_sd_token=0xFF; g_sd_checksum=0;
+    sd_spi_init();
+    SD_CS_HIGH();
+    for(i=0;i<10;i++) sd_spi_xfer(0xFF);
+    r=sd_cmd(0,0,0x95);
+    if(r!=0x01){ g_sd_status=0x10U|r; SD_CS_HIGH(); return 0; }
+    r=sd_cmd(8,0x000001AAUL,0x87);
+    if(r==0x01){
+        for(i=0;i<4;i++) ocr[i]=sd_spi_xfer(0xFF);
+        if(ocr[2]!=0x01 || ocr[3]!=0xAA){ g_sd_status=0x20; SD_CS_HIGH(); return 0; }
+        for(tries=0;tries<2000UL;tries++){
+            (void)sd_cmd(55,0,0x01);
+            r=sd_cmd(41,0x40000000UL,0x01);
+            if(r==0) break;
+            if(r!=1){ g_sd_status=0x30U|r; SD_CS_HIGH(); return 0; }
+            delay_ms(1);
+        }
+        if(tries==2000UL){ g_sd_status=0x40; SD_CS_HIGH(); return 0; }
+        r=sd_cmd(58,0,0x01);
+        if(r!=0){ g_sd_status=0x50U|r; SD_CS_HIGH(); return 0; }
+        for(i=0;i<4;i++) ocr[i]=sd_spi_xfer(0xFF);
+        g_sd_type=(ocr[0]&0x40U)?2U:1U;
+    } else if(r&0x04U) {
+        for(tries=0;tries<2000UL;tries++){
+            (void)sd_cmd(55,0,0x01);
+            r=sd_cmd(41,0,0x01);
+            if(r==0) break;
+            if(r!=1){ g_sd_status=0x60U|r; SD_CS_HIGH(); return 0; }
+            delay_ms(1);
+        }
+        if(tries==2000UL){ g_sd_status=0x70; SD_CS_HIGH(); return 0; }
+        g_sd_type=1;
+        r=sd_cmd(16,512,0x01);
+        if(r!=0){ g_sd_status=0x80U|r; SD_CS_HIGH(); return 0; }
+    } else { g_sd_status=0x90U|r; SD_CS_HIGH(); return 0; }
+    if(!sd_wait_ready()){ g_sd_status=0xA0; SD_CS_HIGH(); return 0; }
+    r=sd_cmd(17,0,0x01);
+    if(r!=0){ g_sd_status=0xB0U|r; SD_CS_HIGH(); return 0; }
+    for(tries=0;tries<200000UL;tries++){
+        token=sd_spi_xfer(0xFF);
+        if(token==0xFE) break;
+        if(token!=0xFF) break;
+    }
+    g_sd_token=token;
+    if(token!=0xFE){ g_sd_status=0xC0U|token; SD_CS_HIGH(); return 0; }
+    {
+        uint32_t n, sum=0;
+        for(n=0;n<512UL;n++){ g_sd_sector0[n]=sd_spi_xfer(0xFF); sum+=g_sd_sector0[n]; }
+        (void)sd_spi_xfer(0xFF); (void)sd_spi_xfer(0xFF);
+        g_sd_checksum=sum;
+    }
+    SD_CS_HIGH(); sd_spi_xfer(0xFF);
+    g_sd_status=2;
+    return 1;
+}
+
 
 static void gpio_af12(GPIO_TypeDef *port, uint32_t pin)
 {
@@ -187,6 +316,7 @@ static uint8_t glyph_col(char c, uint8_t col)
     case 'O': { static const uint8_t a[5]={0x3E,0x41,0x41,0x41,0x3E}; return a[col]; }
     case 'P': { static const uint8_t a[5]={0x7F,0x09,0x09,0x09,0x06}; return a[col]; }
     case 'R': { static const uint8_t a[5]={0x7F,0x09,0x19,0x29,0x46}; return a[col]; }
+    case 'S': { static const uint8_t a[5]={0x26,0x49,0x49,0x49,0x32}; return a[col]; }
     case 'T': { static const uint8_t a[5]={0x01,0x01,0x7F,0x01,0x01}; return a[col]; }
     case 'X': { static const uint8_t a[5]={0x63,0x14,0x08,0x14,0x63}; return a[col]; }
     case 'Y': { static const uint8_t a[5]={0x03,0x04,0x78,0x04,0x03}; return a[col]; }
@@ -274,6 +404,7 @@ int main(void)
         g_error_code = 1UL;
         for (;;) __NOP();
     }
+    backlight_init();
     lcd_reset_gpio_init();
     fsmc_gpio_init();
     fsmc_init();
@@ -284,6 +415,9 @@ int main(void)
     g_stage_status = ST_LCD_INIT;
     draw_pattern();
     g_stage_status = ST_PATTERN;
+    (void)sd_init_and_read_sector0();
+    fill_rect(130,370,189,409,(g_sd_status==2U)?GREEN:RED);
+    draw_text(145,382,"SD",BLACK,2);
     for (;;) {
         ++g_loop_counter;
         __WFI();
