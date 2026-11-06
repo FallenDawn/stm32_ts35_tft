@@ -227,7 +227,7 @@ static void printer_uart_init(void)
 
 static void printer_uart_send_test_line(void)
 {
-    static const char message[] = `;JZ-TS35 USART3 TX TEST\\r\\n`;
+    static const char message[] = ";JZ-TS35 USART3 TX TEST\r\n";
     uint32_t i;
     for (i = 0U; i < sizeof(message) - 1U; ++i) {
         while ((USART3->SR & USART_SR_TXE) == 0U) __NOP();
