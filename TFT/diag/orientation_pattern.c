@@ -145,9 +145,11 @@ static void lcd_data(uint16_t data)
 static void set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
     lcd_cmd(0x2A);
-    lcd_data(0); lcd_data(x0); lcd_data(0); lcd_data(x1);
+    lcd_data((uint8_t)(x0 >> 8)); lcd_data((uint8_t)x0);
+    lcd_data((uint8_t)(x1 >> 8)); lcd_data((uint8_t)x1);
     lcd_cmd(0x2B);
-    lcd_data(0); lcd_data(y0); lcd_data(0); lcd_data(y1);
+    lcd_data((uint8_t)(y0 >> 8)); lcd_data((uint8_t)y0);
+    lcd_data((uint8_t)(y1 >> 8)); lcd_data((uint8_t)y1);
     lcd_cmd(0x2C);
 }
 static void fill_rect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
