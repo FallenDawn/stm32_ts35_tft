@@ -23,10 +23,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install ARM GNU toolchain
+      - name: Install ARM GNU toolchain (bounded)
+        timeout-minutes: 4
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
+          set -euo pipefail
+          sudo apt-get update -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20
+          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi binutils-arm-none-eabi
 
       - name: Compile standalone STM32F207 Stage 2D ILI9486L firmware
         shell: bash
