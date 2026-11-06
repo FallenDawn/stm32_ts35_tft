@@ -48,3 +48,5 @@ jobs:
             .build/jz-ts35-stage2d3/JZ-TS35-STAGE2D3-ORIENTATION.bin
             .build/jz-ts35-stage2d3/JZ-TS35-STAGE2D3-ORIENTATION.map
             .build/jz-ts35-stage2d3/JZ-TS35-STAGE2D3-ORIENTATION.symbols.txt
+
+# Stage 2D.3 source uses explicit high-byte/low-byte address-window coordinates.
