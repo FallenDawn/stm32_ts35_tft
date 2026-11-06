@@ -374,13 +374,13 @@ int main(void)
         w25q32_read_jedec_id(id);
         /*
          * SWD-readable diagnostic mailbox in SRAM.
-         * Fixed address: 0x20000000; read 8 words in STM32CubeProgrammer.
+         * Fixed address: 0x2001F000; read 8 words in STM32CubeProgrammer.
          * [0] magic 'W25Q' [1] JEDEC manufacturer [2] memory type
          * [3] capacity [4] status (1=PASS, 2=all FF, 3=all 00, 4=other)
          * [5] attempt counter [6] bitwise ID pack [7] reserved.
          */
         {
-            volatile uint32_t *mailbox = (volatile uint32_t *)0x20000000UL;
+            volatile uint32_t *mailbox = (volatile uint32_t *)0x2001F000UL;
             uint32_t status = 4UL;
             if (id[0] == 0xEFU && id[1] == 0x40U && id[2] == 0x16U) status = 1UL;
             else if (id[0] == 0xFFU && id[1] == 0xFFU && id[2] == 0xFFU) status = 2UL;
