@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: jz-ts35-clock-diagnostic
+  group: jz-ts35-stage2b-clock-diagnostic
   cancel-in-progress: true
 
 permissions:
