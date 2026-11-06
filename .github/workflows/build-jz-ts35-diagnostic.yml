@@ -6,6 +6,7 @@ on:
       - stage2c/gpio-readonly-baseline
       - stage2d/ili9486l-bringup
       - stage2d1/ili9486l-wiring-corrected
+      - port/marlin-touch-jz-ts35
   workflow_dispatch:
 
 concurrency:
