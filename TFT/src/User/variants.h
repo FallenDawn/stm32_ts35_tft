@@ -87,7 +87,10 @@
 //LCD Backlight pin (PWM can adjust brightness)
 #if defined(TFT24_V1_1)
   #define LCD_LED_PIN   PA8
-#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(JZ_TS35_V2_1)
+  // JZ-TS35 Stage 2F: Q1 backlight switch is driven active-high from PA1.
+  #define LCD_LED_PIN   PA1
+#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define LCD_LED_PIN   PD12
 #elif defined(MKS_32_V1_4)
  #define LCD_LED_PIN    PD14  
@@ -100,8 +103,8 @@
   #define SERIAL_PORT_2 _USART2
   #define SERIAL_PORT_3 _USART3
 #elif defined(JZ_TS35_V2_1)
-  // Provisional printer UART from the F207 TFT35 reference; verify the JZ board connector.
-  #define SERIAL_PORT   _USART2
+  // Confirmed JZ-TS35 printer TX: PB10 = USART3_TX.
+  #define SERIAL_PORT   _USART3
 #elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define SERIAL_PORT   _USART2  //default usart port
   #define SERIAL_PORT_2 _USART1
@@ -195,8 +198,12 @@
   #define W25Qxx_SPEED  0
   #define W25Qxx_SPI    _SPI3
   #define SPI3_CS_PIN   PD2
-#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
-  // Provisional W25Q32 wiring: SPI3 / PB6 CS inherited from the F207 TFT35 V3 reference.
+#elif defined(JZ_TS35_V2_1)
+  // Confirmed JZ-TS35 W25Q32 wiring: SPI2 SCK=PB13, MISO=PB14, MOSI=PB15, CS=PB12.
+  #define W25Qxx_SPEED  1
+  #define W25Qxx_SPI    _SPI2
+  #define SPI2_CS_PIN   PB12
+#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define W25Qxx_SPEED  1
   #define W25Qxx_SPI    _SPI3
   #define SPI3_CS_PIN   PB6
