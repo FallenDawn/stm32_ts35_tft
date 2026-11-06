@@ -199,10 +199,10 @@
   #define W25Qxx_SPI    _SPI3
   #define SPI3_CS_PIN   PD2
 #elif defined(JZ_TS35_V2_1)
-  // Confirmed JZ-TS35 W25Q32 wiring: SPI2 SCK=PB13, MISO=PB14, MOSI=PB15, CS=PB12.
+  // Diagnostic isolation: restore Stage 2F W25Qxx SPI3/PB6 configuration.
   #define W25Qxx_SPEED  1
-  #define W25Qxx_SPI    _SPI2
-  #define SPI2_CS_PIN   PB12
+  #define W25Qxx_SPI    _SPI3
+  #define SPI3_CS_PIN   PB6
 #elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define W25Qxx_SPEED  1
   #define W25Qxx_SPI    _SPI3
