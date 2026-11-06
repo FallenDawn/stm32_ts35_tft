@@ -197,6 +197,45 @@ static void lcd_init(void)
     delay_ms(150U);
 }
 
+/*
+ * Printer UART diagnostic: USART3_TX on PB10 (AF7).
+ * Reset-default clock tree: HSI 16 MHz, APB1 = 16 MHz.
+ * 115200 baud, 8 data bits, no parity, 1 stop bit.
+ * Only sends a Marlin-compatible comment line; it is not a G-code command.
+ */
+static void printer_uart_init(void)
+{
+    RCC->AHB1ENR |= (1UL << 1);  /* GPIOB clock */
+    RCC->APB1ENR |= (1UL << 18); /* USART3 clock */
+    (void)RCC->APB1ENR;
+
+    /* PB10 = USART3_TX, alternate function 7. */
+    GPIOB->MODER = (GPIOB->MODER & ~(3UL << (10U * 2U))) |
+                   (2UL << (10U * 2U));
+    GPIOB->OTYPER &= ~(1UL << 10U);
+    GPIOB->OSPEEDR = (GPIOB->OSPEEDR & ~(3UL << (10U * 2U))) |
+                     (2UL << (10U * 2U));
+    GPIOB->PUPDR &= ~(3UL << (10U * 2U));
+    GPIOB->AFR[1] = (GPIOB->AFR[1] & ~(15UL << 8U)) | (7UL << 8U);
+
+    USART3->CR1 = 0U;
+    USART3->CR2 = 0U;
+    USART3->CR3 = 0U;
+    USART3->BRR = 139U; /* 16 MHz / 115200, rounded */
+    USART3->CR1 = USART_CR1_TE | USART_CR1_UE;
+}
+
+static void printer_uart_send_test_line(void)
+{
+    static const char message[] = `;JZ-TS35 USART3 TX TEST\\r\\n`;
+    uint32_t i;
+    for (i = 0U; i < sizeof(message) - 1U; ++i) {
+        while ((USART3->SR & USART_SR_TXE) == 0U) __NOP();
+        USART3->DR = (uint16_t)message[i];
+    }
+    while ((USART3->SR & USART_SR_TC) == 0U) __NOP();
+}
+
 static void lcd_fill(uint16_t color)
 {
     uint32_t i;
@@ -246,5 +285,11 @@ int main(void)
     lcd_fill(0x0000);
 
     g_stage2d_status = ST_FILL_DONE;
-    for (;;) __WFI();
+
+    /* Add only printer TX after the already-verified LCD sequence. */
+    printer_uart_init();
+    for (;;) {
+        printer_uart_send_test_line();
+        delay_ms(1000U);
+    }
 }
