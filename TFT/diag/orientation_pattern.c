@@ -1,7 +1,8 @@
 /*
  * JZ-TS35 V2.1 - Stage 2E SD SPI1 + backlight diagnostic
  * STM32F207VCT6 + ILI9486L, confirmed FSMC wiring only.
- * Backlight test: PD12 high (active-high candidate).
+ * Backlight test: PA1 drives the Q1 control terminal; active-high first trial.
+ * Q1 polarity is not fully proven, so JZ_Q1_ACTIVE_LEVEL can be set to 0 or 1.
  * SD test: SPI1 PA4/PA5/PA6/PA7, read-only initialization and sector-0 read.
  *
  * Portrait address window: X=0..319, Y=0..479.
@@ -68,15 +69,44 @@ static void delay_ms(uint32_t ms)
 }
 
 
+/*
+ * Q1 control is wired to PA1 according to board continuity measurements.
+ * First trial assumes PA1 HIGH enables Q1. If the panel stays dark, change
+ * JZ_Q1_ACTIVE_LEVEL to 0 and rebuild; do not jumper the FPC pins.
+ */
+#ifndef JZ_Q1_ACTIVE_LEVEL
+#define JZ_Q1_ACTIVE_LEVEL 1
+#endif
+
 static void backlight_init(void)
 {
-    RCC->AHB1ENR |= (1UL << 3);
+    const uint32_t pin = 1UL;
+    const uint32_t shift = pin * 2UL;
+
+    RCC->AHB1ENR |= (1UL << 0); /* GPIOA clock */
     (void)RCC->AHB1ENR;
-    GPIOD->MODER = (GPIOD->MODER & ~(3UL << 24)) | (1UL << 24);
-    GPIOD->OTYPER &= ~(1UL << 12);
-    GPIOD->OSPEEDR = (GPIOD->OSPEEDR & ~(3UL << 24)) | (2UL << 24);
-    GPIOD->PUPDR &= ~(3UL << 24);
-    GPIOD->BSRRL = (uint16_t)(1UL << 12);
+
+    /* PA1 = push-pull output, no pull-up/down. */
+    GPIOA->MODER = (GPIOA->MODER & ~(3UL << shift)) | (1UL << shift);
+    GPIOA->OTYPER &= ~(1UL << pin);
+    GPIOA->OSPEEDR = (GPIOA->OSPEEDR & ~(3UL << shift)) | (2UL << shift);
+    GPIOA->PUPDR &= ~(3UL << shift);
+
+    /* Start in the inactive state to avoid a startup glitch. */
+#if JZ_Q1_ACTIVE_LEVEL
+    GPIOA->BSRRH = (uint16_t)(1UL << pin);
+#else
+    GPIOA->BSRRL = (uint16_t)(1UL << pin);
+#endif
+}
+
+static void backlight_on(void)
+{
+#if JZ_Q1_ACTIVE_LEVEL
+    GPIOA->BSRRL = (uint16_t)(1UL << 1);
+#else
+    GPIOA->BSRRH = (uint16_t)(1UL << 1);
+#endif
 }
 
 #define SD_CS_LOW()  (GPIOA->BSRRH = (uint16_t)(1UL << 4))
@@ -417,6 +447,8 @@ int main(void)
     g_stage_status = ST_RESET_DONE;
     lcd_init();
     g_stage_status = ST_LCD_INIT;
+    backlight_on();
+    delay_ms(20U);
     draw_pattern();
     g_stage_status = ST_PATTERN;
     (void)sd_init_and_read_sector0();
