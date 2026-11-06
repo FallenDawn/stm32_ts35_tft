@@ -1,4 +1,4 @@
-name: JZ-TS35 Stage 2D ILI9486L bring-up
+name: JZ-TS35 USART3 TX diagnostic build
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: jz-ts35-stage2d-ili9486l
+  group: jz-ts35-usart3-tx
   cancel-in-progress: true
 
 permissions:
@@ -24,18 +24,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install ARM GNU toolchain (bounded)
-        timeout-minutes: 4
+        timeout-minutes: 10
         run: |
           set -euo pipefail
           sudo apt-get update -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20
           sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi binutils-arm-none-eabi
 
-      - name: Compile standalone STM32F207 Stage 2D ILI9486L firmware
+      - name: Compile standalone STM32F207 USART3 TX test firmware
         shell: bash
         run: |
           set -euo pipefail
 
-          BUILD_DIR=".build/jz-ts35-stage2d"
+          BUILD_DIR=".build/jz-ts35-usart3-tx"
           mkdir -p "$BUILD_DIR"
 
           CPU_FLAGS="-mcpu=cortex-m3 -mthumb -mfloat-abi=soft"
@@ -54,39 +54,39 @@ jobs:
           arm-none-eabi-gcc $CPU_FLAGS -nostdlib \
             -Wl,--gc-sections \
             -Wl,--build-id=none \
-            -Wl,-Map="$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.map" \
+            -Wl,-Map="$BUILD_DIR/JZ-TS35-USART3-TX-TEST.map" \
             -T buildroot/ldscripts/jz_ts35_v2_1_diag.ld \
             "$BUILD_DIR/startup.o" \
             "$BUILD_DIR/diag_main.o" \
             -Wl,--start-group -lgcc -Wl,--end-group \
-            -o "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf"
+            -o "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.elf"
 
           arm-none-eabi-objcopy -O ihex \
-            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.hex"
+            "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.elf" "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.hex"
           arm-none-eabi-objcopy -O binary \
-            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.bin"
+            "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.elf" "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.bin"
           arm-none-eabi-nm -n \
-            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" > "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.symbols.txt"
+            "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.elf" > "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.symbols.txt"
           arm-none-eabi-objdump -h \
-            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" > "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.sections.txt"
+            "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.elf" > "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.sections.txt"
 
-          echo "=== Stage 2D symbols ==="
+          echo "=== USART3 TX test symbols ==="
           grep -E 'g_stage2d_status|g_pixels_written|SysTick_Handler|Reset_Handler| main$' \
-            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.symbols.txt"
+            "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.symbols.txt"
           echo "=== ELF size ==="
-          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf"
+          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.elf"
           echo "=== ELF sections ==="
-          cat "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.sections.txt"
+          cat "$BUILD_DIR/JZ-TS35-USART3-TX-TEST.sections.txt"
 
-      - name: Upload Stage 2D firmware and debug symbols
+      - name: Upload USART3 TX test firmware and debug symbols
         uses: actions/upload-artifact@v4
         with:
-          name: JZ-TS35-STM32F207-STAGE2D-ILI9486L
+          name: JZ-TS35-STM32F207-USART3-TX-TEST
           if-no-files-found: error
           path: |
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.elf
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.hex
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.bin
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.map
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.symbols.txt
-            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.sections.txt
+            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.elf
+            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.hex
+            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.bin
+            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.map
+            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.symbols.txt
+            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.sections.txt
