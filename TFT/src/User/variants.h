@@ -137,7 +137,8 @@
   #define XPT2046_MISO  PB4
   #define XPT2046_MOSI  PB5
   #define XPT2046_TPEN  PC1
-#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0) 
+#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
+  // JZ-TS35-V2.1: intentionally reuse the upstream TFT35 V3.0 XPT2046 default pinout.
   #define XPT2046_CS    PE6
   #define XPT2046_SCK   PE5
   #define XPT2046_MISO  PE4
