@@ -1,13 +1,14 @@
-name: JZ-TS35 Stage 2C read-only GPIO diagnostic
+name: JZ-TS35 Stage 2D ILI9486L bring-up
 
 on:
   push:
     branches:
       - stage2c/gpio-readonly-baseline
+      - stage2d/ili9486l-bringup
   workflow_dispatch:
 
 concurrency:
-  group: jz-ts35-stage2c-gpio-diagnostic
+  group: jz-ts35-stage2d-ili9486l
   cancel-in-progress: true
 
 permissions:
@@ -25,12 +26,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
 
-      - name: Compile standalone STM32F207 Stage 2C GPIO diagnostic firmware
+      - name: Compile standalone STM32F207 Stage 2D ILI9486L firmware
         shell: bash
         run: |
           set -euo pipefail
 
-          BUILD_DIR=".build/jz-ts35-stage2c"
+          BUILD_DIR=".build/jz-ts35-stage2d"
           mkdir -p "$BUILD_DIR"
 
           CPU_FLAGS="-mcpu=cortex-m3 -mthumb -mfloat-abi=soft"
@@ -49,7 +50,7 @@ jobs:
           arm-none-eabi-gcc $CPU_FLAGS -nostdlib \
             -Wl,--gc-sections \
             -Wl,--build-id=none \
-            -Wl,-Map="$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.map" \
+            -Wl,-Map="$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.map" \
             -T buildroot/ldscripts/jz_ts35_v2_1_diag.ld \
             "$BUILD_DIR/startup.o" \
             "$BUILD_DIR/diag_main.o" \
@@ -65,7 +66,7 @@ jobs:
           arm-none-eabi-objdump -h \
             "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf" > "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.sections.txt"
 
-          echo "=== Stage 2C symbols ==="
+          echo "=== Stage 2D symbols ==="
           grep -E 'g_diag|SysTick_Handler|HardFault_Handler|Fault_Capture|Reset_Handler| main$' \
             "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.symbols.txt"
           echo "=== ELF size ==="
@@ -73,10 +74,10 @@ jobs:
           echo "=== ELF sections ==="
           cat "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.sections.txt"
 
-      - name: Upload Stage 2C firmware and debug symbols
+      - name: Upload Stage 2D firmware and debug symbols
         uses: actions/upload-artifact@v4
         with:
-          name: JZ-TS35-STM32F207-STAGE2C-GPIO-READONLY
+          name: JZ-TS35-STM32F207-STAGE2D-ILI9486L
           if-no-files-found: error
           path: |
             .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.elf
