@@ -330,6 +330,63 @@ static void lcd_fill(uint16_t color)
     }
 }
 
+
+/*
+ * W25Q32 full-chip read-only dump engine.
+ * SRAM staging buffer: 0x20010000..0x20017FFF (32 KiB).
+ * SWD mailbox: 0x2001F000 (8 words).
+ * Host sets [1]=1, [2]=offset, [3]=length (1..32768), then polls [4].
+ * Firmware sets [4]=1 while busy, then [4]=2 when buffer is ready.
+ * Host reads staging buffer and sets [1]=0 before issuing next chunk.
+ */
+#define W25Q_DUMP_BUFFER ((volatile uint8_t *)0x20010000UL)
+#define W25Q_DUMP_MAILBOX ((volatile uint32_t *)0x2001F000UL)
+#define W25Q_CAPACITY 0x00400000UL
+#define W25Q_CHUNK_MAX 32768UL
+
+static void w25q32_read_bytes(uint32_t address, volatile uint8_t *dst, uint32_t length)
+{
+    uint32_t i;
+    GPIOB->BSRRH = (uint16_t)(1UL << 12U);
+    (void)w25q32_spi_transfer(0x03U);
+    (void)w25q32_spi_transfer((uint8_t)(address >> 16U));
+    (void)w25q32_spi_transfer((uint8_t)(address >> 8U));
+    (void)w25q32_spi_transfer((uint8_t)address);
+    for (i = 0U; i < length; ++i) dst[i] = w25q32_spi_transfer(0xFFU);
+    GPIOB->BSRRL = (uint16_t)(1UL << 12U);
+}
+
+static void w25q32_dump_service(void)
+{
+    volatile uint32_t *m = W25Q_DUMP_MAILBOX;
+    uint32_t command = m[1];
+    if (command == 0U) {
+        m[4] = 0U;
+        __DSB();
+        return;
+    }
+    if (command != 1U || m[4] == 1U || m[4] == 2U) return;
+
+    {
+        uint32_t offset = m[2];
+        uint32_t length = m[3];
+        m[4] = 1U; /* BUSY */
+        m[5] = offset;
+        m[6] = 0U;
+        __DSB();
+
+        if (length == 0U || length > W25Q_CHUNK_MAX ||
+            offset >= W25Q_CAPACITY || length > (W25Q_CAPACITY - offset)) {
+            m[4] = 3U; /* invalid request */
+        } else {
+            w25q32_read_bytes(offset, W25Q_DUMP_BUFFER, length);
+            m[6] = length;
+            m[4] = 2U; /* READY */
+        }
+        __DSB();
+    }
+}
+
 int main(void)
 {
     g_stage2d_status = ST_BOOT;
@@ -362,40 +419,27 @@ int main(void)
     g_stage2d_status = ST_FILL_DONE;
 
     /*
-     * Preserve the proven LCD sequence and USART3 TX. Then read W25Q32 JEDEC ID.
-     * No erase/program/write commands are issued; this is read-only.
+     * ST-LINK-only W25Q32 full dump. JEDEC ID is validated first.
+     * The flash is accessed with READ (0x03) only; no erase/program command.
      */
-    printer_uart_init();
     w25q32_gpio_init();
-    uart_send_text(";JZ-TS35 W25Q32 JEDEC ID READ-ONLY TEST\\r\\n");
+    {
+        uint8_t id[3];
+        volatile uint32_t *m = W25Q_DUMP_MAILBOX;
+        w25q32_read_jedec_id(id);
+        m[0] = 0x57323551UL; /* 'W25Q' */
+        m[1] = 0U;           /* host command */
+        m[2] = 0U;           /* requested flash offset */
+        m[3] = 0U;           /* requested length */
+        m[4] = (id[0] == 0xEFU && id[1] == 0x40U && id[2] == 0x16U) ? 0U : 4U;
+        m[5] = 0U;
+        m[6] = ((uint32_t)id[0] << 16U) | ((uint32_t)id[1] << 8U) | id[2];
+        m[7] = 0xA55A5AA5UL;
+        __DSB();
+    }
 
     for (;;) {
-        uint8_t id[3];
-        w25q32_read_jedec_id(id);
-        /*
-         * SWD-readable diagnostic mailbox in SRAM.
-         * Fixed address: 0x2001F000; read 8 words in STM32CubeProgrammer.
-         * [0] magic 'W25Q' [1] JEDEC manufacturer [2] memory type
-         * [3] capacity [4] status (1=PASS, 2=all FF, 3=all 00, 4=other)
-         * [5] attempt counter [6] bitwise ID pack [7] reserved.
-         */
-        {
-            volatile uint32_t *mailbox = (volatile uint32_t *)0x2001F000UL;
-            uint32_t status = 4UL;
-            if (id[0] == 0xEFU && id[1] == 0x40U && id[2] == 0x16U) status = 1UL;
-            else if (id[0] == 0xFFU && id[1] == 0xFFU && id[2] == 0xFFU) status = 2UL;
-            else if (id[0] == 0x00U && id[1] == 0x00U && id[2] == 0x00U) status = 3UL;
-            mailbox[0] = 0x57323551UL;
-            mailbox[1] = (uint32_t)id[0];
-            mailbox[2] = (uint32_t)id[1];
-            mailbox[3] = (uint32_t)id[2];
-            mailbox[4] = status;
-            mailbox[5] = mailbox[5] + 1UL;
-            mailbox[6] = ((uint32_t)id[0] << 16U) |
-                         ((uint32_t)id[1] << 8U) | (uint32_t)id[2];
-            mailbox[7] = 0xA55A5AA5UL;
-            __DSB();
-        }
-        delay_ms(1000U);
+        w25q32_dump_service();
+        __NOP();
     }
 }
