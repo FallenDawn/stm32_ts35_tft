@@ -25,7 +25,7 @@ def run(cli, *args):
     return p.stdout
 
 def read_mem(cli, addr, size, path, width=8):
-    run(cli, f"-r{width}", hex(addr), str(size), str(path))
+    run(cli, "-r", hex(addr), str(size), str(path))
     data = Path(path).read_bytes()
     if len(data) != size: raise RuntimeError(f"读取长度错误：{len(data)} / {size}")
     return data
