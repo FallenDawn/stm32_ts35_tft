@@ -19,6 +19,7 @@
 #define DIAG_STATUS_RUNNING     0x52554E31UL /* "RUN1" */
 #define DIAG_STATUS_FAULT       0x4641554CUL /* "FAUL" */
 #define DIAG_STATUS_SYSTICK_ERR 0x53595445UL /* "SYTE" */
+#define DIAG_STATUS_CLOCK_FAIL  0x434C4B46UL /* CLKF */
 #define DIAG_FAULT_MAGIC        0x464C5444UL /* "FLTD" */
 
 typedef struct
@@ -360,11 +361,123 @@ int main(void)
         g_diag.preflight_flash_acr = FLASH->ACR;
     }
 
-    /* Final capture: must still be HSI 16 MHz; do not touch SW or SysTick. */
+    /* Final capture: must still be HSI 16 MHz before Stage 2B. */
     g_diag.preflight_rcc_cr = RCC->CR;
     g_diag.preflight_rcc_cfgr = RCC->CFGR;
     g_diag.preflight_flash_acr = FLASH->ACR;
     g_diag.preflight_systick_load = SysTick->LOAD;
+
+    /*
+     * Stage 2B: switch SYSCLK to the already-locked HSI-sourced 96 MHz PLL.
+     * Stage 2A.5 preflight above is retained. SysTick is stopped only during
+     * the transition and restarted only after SWS confirms the actual source.
+     */
+    g_diag.switch_result = 0UL;
+    g_diag.switch_poll_count = 0UL;
+    g_diag.switch_sysclk_hz = HSI_VALUE;
+
+    if (g_diag.preflight_result == 1UL &&
+        (RCC->CR & (RCC_CR_HSION | RCC_CR_HSIRDY |
+                    RCC_CR_PLLON | RCC_CR_PLLRDY)) ==
+                   (RCC_CR_HSION | RCC_CR_HSIRDY |
+                    RCC_CR_PLLON | RCC_CR_PLLRDY) &&
+        (RCC->PLLCFGR & 0x0F43FFFFUL) == (0x04003010UL & 0x0F43FFFFUL) &&
+        (RCC->CFGR & 0x0000FC03UL) == 0x00009400UL &&
+        (FLASH->ACR & 0x0000070FUL) == 0x00000703UL &&
+        SysTick->LOAD == ((HSI_VALUE / 1000UL) - 1UL) &&
+        (SysTick->CTRL & 7UL) == 7UL)
+    {
+        SysTick->CTRL = 0UL;
+        SCB->ICSR = SCB_ICSR_PENDSTCLR;
+        __DSB();
+        __ISB();
+
+        RCC->CFGR = (RCC->CFGR & ~3UL) | 2UL;
+        __DSB();
+        __ISB();
+
+        while (((RCC->CFGR >> 2) & 3UL) != 2UL &&
+               g_diag.switch_poll_count < 1000000UL)
+        {
+            ++g_diag.switch_poll_count;
+            __NOP();
+        }
+
+        g_diag.switch_rcc_cr = RCC->CR;
+        g_diag.switch_rcc_cfgr = RCC->CFGR;
+        g_diag.switch_flash_acr = FLASH->ACR;
+
+        if (((RCC->CFGR >> 2) & 3UL) == 2UL)
+        {
+            SysTick->LOAD = (96000000UL / 1000UL) - 1UL;
+            SysTick->VAL = 0UL;
+            SCB->ICSR = SCB_ICSR_PENDSTCLR;
+            SysTick->CTRL = 7UL;
+            __DSB();
+            __ISB();
+
+            g_diag.clock_hz = 96000000UL;
+            g_diag.switch_sysclk_hz = 96000000UL;
+            g_diag.switch_systick_load = SysTick->LOAD;
+            g_diag.switch_result = 1UL;
+        }
+        else
+        {
+            /* PLL switch timed out: request HSI and independently verify it. */
+            RCC->CFGR = (RCC->CFGR & ~3UL);
+            __DSB();
+            __ISB();
+
+            while (((RCC->CFGR >> 2) & 3UL) != 0UL &&
+                   g_diag.switch_poll_count < 2000000UL)
+            {
+                ++g_diag.switch_poll_count;
+                __NOP();
+            }
+
+            g_diag.switch_rcc_cr = RCC->CR;
+            g_diag.switch_rcc_cfgr = RCC->CFGR;
+            g_diag.switch_flash_acr = FLASH->ACR;
+
+            if (((RCC->CFGR >> 2) & 3UL) == 0UL)
+            {
+                SysTick->LOAD = (HSI_VALUE / 1000UL) - 1UL;
+                SysTick->VAL = 0UL;
+                SCB->ICSR = SCB_ICSR_PENDSTCLR;
+                SysTick->CTRL = 7UL;
+                __DSB();
+                __ISB();
+
+                g_diag.clock_hz = HSI_VALUE;
+                g_diag.switch_sysclk_hz = HSI_VALUE;
+                g_diag.switch_systick_load = SysTick->LOAD;
+                g_diag.switch_result = 2UL;
+            }
+            else
+            {
+                SysTick->CTRL = 0UL;
+                g_diag.switch_systick_load = SysTick->LOAD;
+                g_diag.switch_result = 3UL;
+                g_diag.status = DIAG_STATUS_CLOCK_FAIL;
+                __DSB();
+                __ISB();
+                for (;;)
+                {
+                    ++g_diag.switch_poll_count;
+                    __NOP();
+                }
+            }
+        }
+    }
+    else
+    {
+        /* Preconditions failed: do not switch; retain the verified HSI path. */
+        g_diag.switch_result = 4UL;
+        g_diag.switch_rcc_cr = RCC->CR;
+        g_diag.switch_rcc_cfgr = RCC->CFGR;
+        g_diag.switch_flash_acr = FLASH->ACR;
+        g_diag.switch_systick_load = SysTick->LOAD;
+    }
 
     g_diag.status = DIAG_STATUS_RUNNING;
 
