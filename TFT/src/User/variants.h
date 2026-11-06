@@ -87,10 +87,7 @@
 //LCD Backlight pin (PWM can adjust brightness)
 #if defined(TFT24_V1_1)
   #define LCD_LED_PIN   PA8
-#elif defined(JZ_TS35_V2_1)
-  // JZ-TS35-V2.1: Q1 backlight switch is driven by PA1 (verified on the board).
-  #define LCD_LED_PIN   PA1
-#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define LCD_LED_PIN   PD12
 #elif defined(MKS_32_V1_4)
  #define LCD_LED_PIN    PD14  
@@ -103,9 +100,8 @@
   #define SERIAL_PORT_2 _USART2
   #define SERIAL_PORT_3 _USART3
 #elif defined(JZ_TS35_V2_1)
-  // JZ-TS35-V2.1: printer G-code TX is wired to PB10 (USART3_TX).
-  // USART3_RX uses PB11; verify the return wire before relying on bidirectional status.
-  #define SERIAL_PORT   _USART3
+  // Provisional printer UART from the F207 TFT35 reference; verify the JZ board connector.
+  #define SERIAL_PORT   _USART2
 #elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
   #define SERIAL_PORT   _USART2  //default usart port
   #define SERIAL_PORT_2 _USART1
@@ -137,8 +133,7 @@
   #define XPT2046_MISO  PB4
   #define XPT2046_MOSI  PB5
   #define XPT2046_TPEN  PC1
-#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
-  // JZ-TS35-V2.1: intentionally reuse the upstream TFT35 V3.0 XPT2046 default pinout.
+#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0) 
   #define XPT2046_CS    PE6
   #define XPT2046_SCK   PE5
   #define XPT2046_MISO  PE4
@@ -200,12 +195,8 @@
   #define W25Qxx_SPEED  0
   #define W25Qxx_SPI    _SPI3
   #define SPI3_CS_PIN   PD2
-#elif defined(JZ_TS35_V2_1)
-  // JZ-TS35-V2.1 W25Q32: CS=PB12, SCK=PB13, MISO=PB14, MOSI=PB15 (measured).
-  #define W25Qxx_SPEED  1
-  #define W25Qxx_SPI    _SPI2
-  #define SPI2_CS_PIN   PB12
-#elif defined(TFT35_V3_0) || defined(TFT28_V3_0)
+#elif defined(JZ_TS35_V2_1) || defined(TFT35_V3_0) || defined(TFT28_V3_0)
+  // Provisional W25Q32 wiring: SPI3 / PB6 CS inherited from the F207 TFT35 V3 reference.
   #define W25Qxx_SPEED  1
   #define W25Qxx_SPI    _SPI3
   #define SPI3_CS_PIN   PB6
