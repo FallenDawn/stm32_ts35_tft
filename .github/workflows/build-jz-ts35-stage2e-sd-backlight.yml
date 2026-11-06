@@ -10,15 +10,17 @@ permissions:
   contents: read
 
 jobs:
-  build-pattern:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Install ARM GNU toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
+
       - name: Compile diagnostic firmware
         shell: bash
         run: |
@@ -36,7 +38,8 @@ jobs:
           arm-none-eabi-objcopy -O binary "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.elf" "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.bin"
           arm-none-eabi-nm -n "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.elf" > "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.symbols.txt"
           arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.elf"
-          grep -E 'g_stage_status|g_pixels_written|g_heartbeat|g_sd_status|g_sd_type|g_sd_r1|g_sd_token|g_sd_checksum| main "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.symbols.txt"
+          grep -E 'g_stage_status|g_pixels_written|g_heartbeat|g_sd_status|g_sd_type|g_sd_r1|g_sd_token|g_sd_checksum| main$' "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.symbols.txt"
+
       - name: Upload firmware and symbols
         uses: actions/upload-artifact@v4
         with:
@@ -48,19 +51,3 @@ jobs:
             .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.bin
             .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.map
             .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.symbols.txt
-
-# Stage 2D.3 source uses explicit high-byte/low-byte address-window coordinates.
- "$BUILD_DIR/JZ-TS35-STAGE2E-SD-BACKLIGHT.symbols.txt"
-      - name: Upload firmware and symbols
-        uses: actions/upload-artifact@v4
-        with:
-          name: JZ-TS35-STM32F207-STAGE2E-SD-BACKLIGHT
-          if-no-files-found: error
-          path: |
-            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.elf
-            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.hex
-            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.bin
-            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.map
-            .build/jz-ts35-stage2e/JZ-TS35-STAGE2E-SD-BACKLIGHT.symbols.txt
-
-# Stage 2D.3 source uses explicit high-byte/low-byte address-window coordinates.
