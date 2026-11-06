@@ -55,24 +55,24 @@ jobs:
             "$BUILD_DIR/startup.o" \
             "$BUILD_DIR/diag_main.o" \
             -Wl,--start-group -lgcc -Wl,--end-group \
-            -o "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf"
+            -o "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf"
 
           arm-none-eabi-objcopy -O ihex \
-            "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf" "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.hex"
+            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.hex"
           arm-none-eabi-objcopy -O binary \
-            "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf" "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.bin"
+            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.bin"
           arm-none-eabi-nm -n \
-            "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf" > "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.symbols.txt"
+            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" > "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.symbols.txt"
           arm-none-eabi-objdump -h \
-            "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf" > "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.sections.txt"
+            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf" > "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.sections.txt"
 
           echo "=== Stage 2D symbols ==="
-          grep -E 'g_diag|SysTick_Handler|HardFault_Handler|Fault_Capture|Reset_Handler| main$' \
-            "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.symbols.txt"
+          grep -E 'g_stage2d_status|g_pixels_written|SysTick_Handler|Reset_Handler| main$' \
+            "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.symbols.txt"
           echo "=== ELF size ==="
-          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.elf"
+          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.elf"
           echo "=== ELF sections ==="
-          cat "$BUILD_DIR/JZ-TS35-STAGE2C-GPIO.sections.txt"
+          cat "$BUILD_DIR/JZ-TS35-STAGE2D-ILI9486L.sections.txt"
 
       - name: Upload Stage 2D firmware and debug symbols
         uses: actions/upload-artifact@v4
@@ -80,9 +80,9 @@ jobs:
           name: JZ-TS35-STM32F207-STAGE2D-ILI9486L
           if-no-files-found: error
           path: |
-            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.elf
-            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.hex
-            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.bin
-            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.map
-            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.symbols.txt
-            .build/jz-ts35-stage2c/JZ-TS35-STAGE2C-GPIO.sections.txt
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.elf
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.hex
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.bin
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.map
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.symbols.txt
+            .build/jz-ts35-stage2d/JZ-TS35-STAGE2D-ILI9486L.sections.txt
