@@ -20,7 +20,7 @@
  *
  * This diagnostic keeps SYSCLK on reset-default HSI (16 MHz).
  * It does not touch the external W25Q32, SD, touch controller or UART.
- * Backlight pins FPC33..36 are not driven by this stage.
+ * Backlight: JZ-TS35 Q1 switch, active-high PA1, enabled before LCD init.
  */
 
 #include "stm32f2xx.h"
@@ -57,6 +57,22 @@ static void delay_ms(uint32_t ms)
 {
     uint32_t start = g_ms;
     while ((uint32_t)(g_ms - start) < ms) __NOP();
+}
+
+
+static void backlight_init(void)
+{
+    /* JZ-TS35 Stage 2F: PA1 drives Q1 gate, active-high. */
+    RCC->AHB1ENR |= (1UL << 0); /* GPIOA clock */
+    (void)RCC->AHB1ENR;
+    GPIOA->MODER = (GPIOA->MODER & ~(3UL << (1U * 2U))) |
+                   (1UL << (1U * 2U)); /* PA1 output */
+    GPIOA->OTYPER &= ~(1UL << 1U);
+    GPIOA->OSPEEDR = (GPIOA->OSPEEDR & ~(3UL << (1U * 2U))) |
+                     (2UL << (1U * 2U));
+    GPIOA->PUPDR &= ~(3UL << (1U * 2U));
+    GPIOA->BSRRL = (uint16_t)(1UL << 1U); /* Backlight ON */
+    __DSB();
 }
 
 static void gpio_af12(GPIO_TypeDef *port, uint32_t pin)
@@ -203,6 +219,7 @@ static void lcd_fill(uint16_t color)
 int main(void)
 {
     g_stage2d_status = ST_BOOT;
+    backlight_init(); /* Turn on backlight before touching the LCD bus. */
 
     if (SysTick_Config(HSI_VALUE / 1000UL) != 0UL) {
         for (;;) __NOP();
