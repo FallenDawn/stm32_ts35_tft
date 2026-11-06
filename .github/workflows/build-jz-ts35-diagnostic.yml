@@ -84,9 +84,9 @@ jobs:
           name: JZ-TS35-STM32F207-USART3-TX-TEST
           if-no-files-found: error
           path: |
-            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.elf
-            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.hex
-            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.bin
-            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.map
-            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.symbols.txt
-            .build/jz-ts35-stage2d/JZ-TS35-USART3-TX-TEST.sections.txt
+            .build/jz-ts35-usart3-tx/JZ-TS35-USART3-TX-TEST.elf
+            .build/jz-ts35-usart3-tx/JZ-TS35-USART3-TX-TEST.hex
+            .build/jz-ts35-usart3-tx/JZ-TS35-USART3-TX-TEST.bin
+            .build/jz-ts35-usart3-tx/JZ-TS35-USART3-TX-TEST.map
+            .build/jz-ts35-usart3-tx/JZ-TS35-USART3-TX-TEST.symbols.txt
+            .build/jz-ts35-usart3-tx/JZ-TS35-USART3-TX-TEST.sections.txt
