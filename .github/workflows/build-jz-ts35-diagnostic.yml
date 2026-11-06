@@ -5,7 +5,8 @@ on:
     branches:
       - stage2c/gpio-readonly-baseline
       - stage2d/ili9486l-bringup
-      - stage2d1/ili9486l-wiring-corrected`n      - stage2d2/fsmc-observable
+      - stage2d1/ili9486l-wiring-corrected
+      - stage2d2/fsmc-observable
   workflow_dispatch:
 
 concurrency:
