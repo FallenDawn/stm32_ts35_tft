@@ -7,14 +7,16 @@
  *   - Expose stable, named volatile symbols for SWD memory inspection.
  *   - Capture Cortex-M3 fault stack and SCB fault status.
  *
- * This target deliberately does not initialize the TFT, SPI, touch controller,
- * external W25Q32, SD card, UART, or any GPIO.
+ * Stage 2C enables GPIOA-I peripheral clocks and snapshots GPIO registers
+ * without changing any pin mode, pull, speed, output, or alternate function.
+ * It does not initialize the TFT, SPI, touch controller, external W25Q32,
+ * SD card, UART, or drive any board pin.
  */
 
 #include "stm32f2xx.h"
 
 #define DIAG_MAGIC              0x4A5A4447UL /* "JZDG" */
-#define DIAG_VERSION            0x00010001UL
+#define DIAG_VERSION            0x00010002UL
 #define DIAG_STATUS_BOOT        0x424F4F54UL /* "BOOT" */
 #define DIAG_STATUS_RUNNING     0x52554E31UL /* "RUN1" */
 #define DIAG_STATUS_FAULT       0x4641554CUL /* "FAUL" */
@@ -92,6 +94,12 @@ typedef struct
     volatile uint32_t preflight_flash_acr;
     volatile uint32_t preflight_systick_load;
     volatile uint32_t preflight_sysclk_hz;
+
+    /* Stage 2C: GPIO clock/read-only register snapshot; no pin configuration. */
+    volatile uint32_t gpio_ahb1enr_before;
+    volatile uint32_t gpio_ahb1enr_after;
+    volatile uint32_t gpio_snapshot_result; /* 0=pending, 1=readback OK, 2=clock readback mismatch */
+    volatile uint32_t gpio_snapshot[9][8]; /* MODER, OTYPER, OSPEEDR, PUPDR, IDR, ODR, AFRL, AFRH */
 } DiagnosticState;
 
 /* Global, non-static symbol: locate it in the ELF with arm-none-eabi-nm. */
@@ -477,6 +485,47 @@ int main(void)
         g_diag.switch_rcc_cfgr = RCC->CFGR;
         g_diag.switch_flash_acr = FLASH->ACR;
         g_diag.switch_systick_load = SysTick->LOAD;
+    }
+
+    /*
+     * Stage 2C: enable only the GPIO peripheral bus clocks, then take a
+     * read-only snapshot of GPIOA..GPIOI. Enabling AHB1 GPIO clocks does not
+     * alter pin electrical state. Do not write MODER/OTYPER/OSPEEDR/PUPDR/
+     * ODR/BSRR/AFR: all pins, including SWD PA13/PA14, remain untouched.
+     */
+    {
+        GPIO_TypeDef * const ports[9] = {
+            GPIOA, GPIOB, GPIOC, GPIOD, GPIOE, GPIOF, GPIOG, GPIOH, GPIOI
+        };
+        uint32_t i;
+
+        g_diag.gpio_snapshot_result = 0UL;
+        g_diag.gpio_ahb1enr_before = RCC->AHB1ENR;
+        RCC->AHB1ENR |= 0x000001FFUL; /* GPIOA..GPIOI clocks only */
+        __DSB();
+        __ISB();
+        g_diag.gpio_ahb1enr_after = RCC->AHB1ENR;
+
+        for (i = 0UL; i < 9UL; ++i)
+        {
+            g_diag.gpio_snapshot[i][0] = ports[i]->MODER;
+            g_diag.gpio_snapshot[i][1] = ports[i]->OTYPER;
+            g_diag.gpio_snapshot[i][2] = ports[i]->OSPEEDR;
+            g_diag.gpio_snapshot[i][3] = ports[i]->PUPDR;
+            g_diag.gpio_snapshot[i][4] = ports[i]->IDR;
+            g_diag.gpio_snapshot[i][5] = ports[i]->ODR;
+            g_diag.gpio_snapshot[i][6] = ports[i]->AFR[0];
+            g_diag.gpio_snapshot[i][7] = ports[i]->AFR[1];
+        }
+
+        if ((g_diag.gpio_ahb1enr_after & 0x000001FFUL) == 0x000001FFUL)
+        {
+            g_diag.gpio_snapshot_result = 1UL;
+        }
+        else
+        {
+            g_diag.gpio_snapshot_result = 2UL;
+        }
     }
 
     g_diag.status = DIAG_STATUS_RUNNING;
