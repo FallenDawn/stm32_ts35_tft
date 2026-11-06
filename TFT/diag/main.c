@@ -372,19 +372,30 @@ int main(void)
     for (;;) {
         uint8_t id[3];
         w25q32_read_jedec_id(id);
-        uart_send_text("W25Q32 JEDEC ID = ");
-        uart_send_hex_byte(id[0]); uart_send_text(" ");
-        uart_send_hex_byte(id[1]); uart_send_text(" ");
-        uart_send_hex_byte(id[2]);
-        if (id[0] == 0xEFU && id[1] == 0x40U && id[2] == 0x16U)
-            uart_send_text("  [PASS: W25Q32]");
-        else if (id[0] == 0xFFU && id[1] == 0xFFU && id[2] == 0xFFU)
-            uart_send_text("  [FAIL: MISO HIGH / NO RESPONSE]");
-        else if (id[0] == 0x00U && id[1] == 0x00U && id[2] == 0x00U)
-            uart_send_text("  [FAIL: ALL ZERO]");
-        else
-            uart_send_text("  [CHECK: UNEXPECTED ID]");
-        uart_send_text("\r\n");
+        /*
+         * SWD-readable diagnostic mailbox in SRAM.
+         * Fixed address: 0x20000000; read 8 words in STM32CubeProgrammer.
+         * [0] magic 'W25Q' [1] JEDEC manufacturer [2] memory type
+         * [3] capacity [4] status (1=PASS, 2=all FF, 3=all 00, 4=other)
+         * [5] attempt counter [6] bitwise ID pack [7] reserved.
+         */
+        {
+            volatile uint32_t *mailbox = (volatile uint32_t *)0x20000000UL;
+            uint32_t status = 4UL;
+            if (id[0] == 0xEFU && id[1] == 0x40U && id[2] == 0x16U) status = 1UL;
+            else if (id[0] == 0xFFU && id[1] == 0xFFU && id[2] == 0xFFU) status = 2UL;
+            else if (id[0] == 0x00U && id[1] == 0x00U && id[2] == 0x00U) status = 3UL;
+            mailbox[0] = 0x57323551UL;
+            mailbox[1] = (uint32_t)id[0];
+            mailbox[2] = (uint32_t)id[1];
+            mailbox[3] = (uint32_t)id[2];
+            mailbox[4] = status;
+            mailbox[5] = mailbox[5] + 1UL;
+            mailbox[6] = ((uint32_t)id[0] << 16U) |
+                         ((uint32_t)id[1] << 8U) | (uint32_t)id[2];
+            mailbox[7] = 0xA55A5AA5UL;
+            __DSB();
+        }
         delay_ms(1000U);
     }
 }
