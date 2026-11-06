@@ -1,9 +1,10 @@
-name: JZ-TS35 Stage 2A.5 clock preflight diagnostic
+name: JZ-TS35 Stage 2B guarded PLL clock switch
 
 on:
   push:
     branches:
       - port/jz-ts35-v2-1
+      - stage2b/clock-switch-safe
   workflow_dispatch:
 
 concurrency:
@@ -49,7 +50,7 @@ jobs:
           arm-none-eabi-gcc $CPU_FLAGS -nostdlib \
             -Wl,--gc-sections \
             -Wl,--build-id=none \
-            -Wl,-Map="$BUILD_DIR/JZ-TS35-PLL-STAGE2A5.map" \
+            -Wl,-Map="$BUILD_DIR/JZ-TS35-PLL-STAGE2B.map" \
             -T buildroot/ldscripts/jz_ts35_v2_1_diag.ld \
             "$BUILD_DIR/startup.o" \
             "$BUILD_DIR/diag_main.o" \
@@ -65,7 +66,7 @@ jobs:
           arm-none-eabi-objdump -h \
             "$BUILD_DIR/JZ-TS35-DIAG.elf" > "$BUILD_DIR/JZ-TS35-DIAG.sections.txt"
 
-          echo "=== Stage 2A.5 clock preflight diagnostic symbols ==="
+          echo "=== Stage 2B guarded PLL switch diagnostic symbols ==="
           grep -E 'g_diag|SysTick_Handler|HardFault_Handler|Fault_Capture|Reset_Handler| main$' \
             "$BUILD_DIR/JZ-TS35-DIAG.symbols.txt" || true
           echo "=== ELF sections ==="
@@ -74,7 +75,7 @@ jobs:
       - name: Upload diagnostic firmware and debug symbols
         uses: actions/upload-artifact@v4
         with:
-          name: JZ-TS35-STM32F207-STAGE2A5-CLOCK-PREFLIGHT-DIAGNOSTIC
+          name: JZ-TS35-STM32F207-STAGE2B-GUARDED-PLL-SWITCH
           if-no-files-found: error
           path: |
             .build/jz-ts35-diagnostic/JZ-TS35-DIAG.elf
