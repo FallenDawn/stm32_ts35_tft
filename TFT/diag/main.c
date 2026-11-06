@@ -236,6 +236,81 @@ static void printer_uart_send_test_line(void)
     while ((USART3->SR & USART_SR_TC) == 0U) __NOP();
 }
 
+/*
+ * W25Q32 SPI2-pin GPIO bit-bang diagnostic.
+ * Confirmed board wiring: PB12=/CS, PB13=SCK, PB14=MISO, PB15=MOSI.
+ * SPI mode 0, MSB first. JEDEC ID command 0x9F; W25Q32JV expected EF 40 16.
+ */
+static void w25q32_gpio_init(void)
+{
+    RCC->AHB1ENR |= (1UL << 1); /* GPIOB clock */
+    (void)RCC->AHB1ENR;
+
+    /* PB12 /CS, PB13 SCK, PB15 MOSI outputs; PB14 MISO input. */
+    GPIOB->MODER &= ~((3UL << 24U) | (3UL << 26U) |
+                      (3UL << 28U) | (3UL << 30U));
+    GPIOB->MODER |=  ((1UL << 24U) | (1UL << 26U) | (1UL << 30U));
+    GPIOB->OTYPER &= ~((1UL << 12U) | (1UL << 13U) |
+                       (1UL << 15U));
+    GPIOB->OSPEEDR |= ((3UL << 24U) | (3UL << 26U) |
+                       (3UL << 28U) | (3UL << 30U));
+    GPIOB->PUPDR &= ~((3UL << 24U) | (3UL << 26U) |
+                      (3UL << 28U) | (3UL << 30U));
+
+    GPIOB->BSRRL = (uint16_t)((1UL << 12U) | (1UL << 15U));
+    GPIOB->BSRRH = (uint16_t)(1UL << 13U); /* SCK idle low */
+    __DSB();
+}
+
+static uint8_t w25q32_spi_transfer(uint8_t tx)
+{
+    uint8_t rx = 0U;
+    uint32_t bit;
+
+    for (bit = 0U; bit < 8U; ++bit) {
+        if ((tx & 0x80U) != 0U) GPIOB->BSRRL = (uint16_t)(1UL << 15U);
+        else                    GPIOB->BSRRH = (uint16_t)(1UL << 15U);
+        __NOP(); __NOP();
+
+        GPIOB->BSRRL = (uint16_t)(1UL << 13U); /* rising edge */
+        __NOP(); __NOP();
+        rx = (uint8_t)((rx << 1U) |
+             ((GPIOB->IDR & (1UL << 14U)) != 0U ? 1U : 0U));
+        GPIOB->BSRRH = (uint16_t)(1UL << 13U); /* falling edge */
+        __NOP(); __NOP();
+        tx <<= 1U;
+    }
+    return rx;
+}
+
+static void w25q32_read_jedec_id(uint8_t id[3])
+{
+    GPIOB->BSRRH = (uint16_t)(1UL << 12U); /* CS low */
+    (void)w25q32_spi_transfer(0x9FU);
+    id[0] = w25q32_spi_transfer(0xFFU);
+    id[1] = w25q32_spi_transfer(0xFFU);
+    id[2] = w25q32_spi_transfer(0xFFU);
+    GPIOB->BSRRL = (uint16_t)(1UL << 12U); /* CS high */
+}
+
+static void uart_send_text(const char *s)
+{
+    while (*s != '\\0') {
+        while ((USART3->SR & USART_SR_TXE) == 0U) __NOP();
+        USART3->DR = (uint16_t)(uint8_t)*s++;
+    }
+    while ((USART3->SR & USART_SR_TC) == 0U) __NOP();
+}
+
+static void uart_send_hex_byte(uint8_t value)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    while ((USART3->SR & USART_SR_TXE) == 0U) __NOP();
+    USART3->DR = (uint16_t)hex[(value >> 4U) & 0x0FU];
+    while ((USART3->SR & USART_SR_TXE) == 0U) __NOP();
+    USART3->DR = (uint16_t)hex[value & 0x0FU];
+}
+
 static void lcd_fill(uint16_t color)
 {
     uint32_t i;
@@ -286,10 +361,30 @@ int main(void)
 
     g_stage2d_status = ST_FILL_DONE;
 
-    /* Add only printer TX after the already-verified LCD sequence. */
+    /*
+     * Preserve the proven LCD sequence and USART3 TX. Then read W25Q32 JEDEC ID.
+     * No erase/program/write commands are issued; this is read-only.
+     */
     printer_uart_init();
+    w25q32_gpio_init();
+    uart_send_text(";JZ-TS35 W25Q32 JEDEC ID READ-ONLY TEST\\r\\n");
+
     for (;;) {
-        printer_uart_send_test_line();
+        uint8_t id[3];
+        w25q32_read_jedec_id(id);
+        uart_send_text("W25Q32 JEDEC ID = ");
+        uart_send_hex_byte(id[0]); uart_send_text(" ");
+        uart_send_hex_byte(id[1]); uart_send_text(" ");
+        uart_send_hex_byte(id[2]);
+        if (id[0] == 0xEFU && id[1] == 0x40U && id[2] == 0x16U)
+            uart_send_text("  [PASS: W25Q32]");
+        else if (id[0] == 0xFFU && id[1] == 0xFFU && id[2] == 0xFFU)
+            uart_send_text("  [FAIL: MISO HIGH / NO RESPONSE]");
+        else if (id[0] == 0x00U && id[1] == 0x00U && id[2] == 0x00U)
+            uart_send_text("  [FAIL: ALL ZERO]");
+        else
+            uart_send_text("  [CHECK: UNEXPECTED ID]");
+        uart_send_text("\\r\\n");
         delay_ms(1000U);
     }
 }
