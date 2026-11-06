@@ -19,6 +19,7 @@
 #define DIAG_STATUS_RUNNING     0x52554E31UL /* "RUN1" */
 #define DIAG_STATUS_FAULT       0x4641554CUL /* "FAUL" */
 #define DIAG_STATUS_SYSTICK_ERR 0x53595445UL /* "SYTE" */
+#define DIAG_STATUS_CLOCK_FAIL  0x434C4B46UL /* "CLKF" */
 #define DIAG_FAULT_MAGIC        0x464C5444UL /* "FLTD" */
 
 typedef struct
@@ -75,7 +76,7 @@ typedef struct
     volatile uint32_t pll_expected_vco_hz;
     volatile uint32_t pll_expected_sysclk_hz;
 
-    /* Stage 2B: bounded SYSCLK switch to the already-locked 96 MHz PLL. */
+    /* Stage 2B: bounded SYSCLK switch; 3=fallback unconfirmed, 4=preconditions not met. */
     volatile uint32_t switch_result;       /* 0=pending, 1=PLL, 2=PLL timeout/HSI restored, 3=fallback unconfirmed, 4=PLL test skipped */
     volatile uint32_t switch_poll_count;
     volatile uint32_t switch_rcc_cr;
@@ -300,71 +301,149 @@ int main(void)
     g_diag.pll_flash_acr = FLASH->ACR;
 
     /*
-     * Stage 2A.5: validate the clock-switch prerequisites without switching
-     * SYSCLK. The target final clock is 96 MHz from HSI-sourced PLL.
+     * Stage 2B: switch SYSCLK to the already-locked HSI-sourced 96 MHz PLL.
+     * Preconditions are checked again from live registers. Do not proceed
+     * unless Stage 2A.5 passed and the hardware readback still matches.
      *
-     * RM0033 limits: APB1 <= 30 MHz and APB2 <= 60 MHz. Therefore, at
-     * 96 MHz use APB1 /4 (24 MHz) and APB2 /2 (48 MHz), not /2 and /1.
-     * AHB remains /1. At the current HSI 16 MHz these are conservative
-     * bus clocks (APB1=4 MHz, APB2=8 MHz). Flash latency is set to 3 WS
-     * for the later 96 MHz step, but the CPU stays on HSI throughout.
-     *
-     * Crucially, SW[1:0] is never changed here and SysTick remains at 16 MHz.
+     * At 96 MHz: HCLK=96 MHz, PCLK1=24 MHz (/4), PCLK2=48 MHz (/2).
+     * Flash latency is already 3 WS with prefetch/I/D cache enabled.
+     * HSI remains enabled as the bounded fallback source.
      */
-    g_diag.preflight_result = 0UL;
-    g_diag.preflight_sysclk_hz = HSI_VALUE;
-    g_diag.preflight_systick_load = SysTick->LOAD;
+    g_diag.switch_result = 0UL;
+    g_diag.switch_poll_count = 0UL;
+    g_diag.switch_sysclk_hz = HSI_VALUE;
 
-    if (g_diag.pll_result == 1UL &&
-        (RCC->CR & RCC_CR_PLLRDY) != 0UL &&
-        (RCC->PLLCFGR & (1UL << 22)) == 0UL)
     {
-        /* Set AHB /1, APB1 /4, APB2 /2 while SYSCLK is still HSI. */
-        RCC->CFGR = (RCC->CFGR & ~((0xFUL << 4) | (7UL << 10) | (7UL << 13)))
-                  | (5UL << 10) | (4UL << 13);
-        __DSB();
-        __ISB();
+        const uint32_t cfgr_prescaler_mask =
+            (0xFUL << 4) | (7UL << 10) | (7UL << 13);
+        const uint32_t expected_prescalers =
+            (5UL << 10) | (4UL << 13);
+        const uint32_t pll_config_mask =
+            0x3FUL | (0x1FFUL << 6) | (3UL << 16) |
+            (1UL << 22) | (0xFUL << 24);
+        const uint32_t expected_pll_config =
+            16UL | (192UL << 6) | (0UL << 16) |
+            (0UL << 22) | (4UL << 24);
+        const uint32_t flash_control_mask =
+            0xFUL | (1UL << 8) | (1UL << 9) | (1UL << 10);
+        const uint32_t expected_flash_control =
+            3UL | (1UL << 8) | (1UL << 9) | (1UL << 10);
+        uint32_t systick_ctrl_before_switch = SysTick->CTRL;
+        uint32_t fallback_confirmed = 0UL;
 
-        /* Prepare 3 Flash wait states and enable prefetch/I/D caches. */
-        FLASH->ACR = (FLASH->ACR & ~0xFUL) | 3UL |
-                     (1UL << 8) | (1UL << 9) | (1UL << 10);
-        __DSB();
-        __ISB();
-
-        g_diag.preflight_rcc_cr = RCC->CR;
-        g_diag.preflight_rcc_cfgr = RCC->CFGR;
-        g_diag.preflight_flash_acr = FLASH->ACR;
-        g_diag.preflight_systick_load = SysTick->LOAD;
-
-        if (((RCC->CFGR >> 2) & 3UL) == 0UL &&
+        if (g_diag.preflight_result == 1UL &&
+            g_diag.preflight_sysclk_hz == HSI_VALUE &&
+            (RCC->CR & (RCC_CR_HSIRDY | RCC_CR_PLLRDY)) ==
+                (RCC_CR_HSIRDY | RCC_CR_PLLRDY) &&
+            (RCC->PLLCFGR & pll_config_mask) == expected_pll_config &&
             (RCC->CFGR & 3UL) == 0UL &&
-            (RCC->CFGR & ((0xFUL << 4) | (7UL << 10) | (7UL << 13))) ==
-                ((5UL << 10) | (4UL << 13)) &&
-            (FLASH->ACR & 0xFUL) == 3UL &&
-            (FLASH->ACR & ((1UL << 8) | (1UL << 9) | (1UL << 10))) ==
-                ((1UL << 8) | (1UL << 9) | (1UL << 10)) &&
+            ((RCC->CFGR >> 2) & 3UL) == 0UL &&
+            (RCC->CFGR & cfgr_prescaler_mask) == expected_prescalers &&
+            (FLASH->ACR & flash_control_mask) == expected_flash_control &&
             SysTick->LOAD == ((HSI_VALUE / 1000UL) - 1UL))
         {
-            g_diag.preflight_result = 1UL; /* prerequisites verified */
+            /*
+             * Stop the 1 kHz tick while changing the clock. Preserve its
+             * control configuration and restart only after SWS is confirmed.
+             */
+            SysTick->CTRL = 0UL;
+            __DSB();
+            __ISB();
+
+            /* Request PLL as SYSCLK, then wait for SWS=PLL (not merely PLLRDY). */
+            RCC->CFGR = (RCC->CFGR & ~3UL) | 2UL;
+            __DSB();
+            __ISB();
+
+            while (((RCC->CFGR >> 2) & 3UL) != 2UL &&
+                   g_diag.switch_poll_count < 1000000UL)
+            {
+                ++g_diag.switch_poll_count;
+                __NOP();
+            }
+
+            if (((RCC->CFGR >> 2) & 3UL) == 2UL)
+            {
+                /* SWS confirms PLL is now the actual SYSCLK source. */
+                SysTick->LOAD = (96000000UL / 1000UL) - 1UL;
+                SysTick->VAL = 0UL;
+                SysTick->CTRL = systick_ctrl_before_switch;
+                __DSB();
+                __ISB();
+
+                g_diag.switch_result = 1UL;
+                g_diag.switch_sysclk_hz = 96000000UL;
+                g_diag.clock_hz = 96000000UL;
+                g_diag.switch_systick_load = SysTick->LOAD;
+            }
+            else
+            {
+                /*
+                 * PLL switch timed out. Request HSI and independently verify
+                 * SWS=HSI before restoring SysTick or returning to main loop.
+                 * Keep conservative APB divisors and 3 WS Flash latency.
+                 */
+                RCC->CFGR = (RCC->CFGR & ~3UL);
+                __DSB();
+                __ISB();
+
+                while (((RCC->CFGR >> 2) & 3UL) != 0UL &&
+                       g_diag.switch_poll_count < 2000000UL)
+                {
+                    ++g_diag.switch_poll_count;
+                    __NOP();
+                }
+
+                if (((RCC->CFGR >> 2) & 3UL) == 0UL)
+                {
+                    fallback_confirmed = 1UL;
+                    g_diag.switch_result = 2UL;
+                    g_diag.switch_sysclk_hz = HSI_VALUE;
+                    g_diag.clock_hz = HSI_VALUE;
+                    SysTick->LOAD = (HSI_VALUE / 1000UL) - 1UL;
+                    SysTick->VAL = 0UL;
+                    SysTick->CTRL = systick_ctrl_before_switch;
+                    __DSB();
+                    __ISB();
+                    g_diag.switch_systick_load = SysTick->LOAD;
+                }
+                else
+                {
+                    /*
+                     * Neither source can be confirmed. Do not re-enable
+                     * SysTick or enter the normal heartbeat loop with an
+                     * unknown clock. Freeze in a separately visible state.
+                     */
+                    g_diag.switch_result = 3UL;
+                    g_diag.switch_sysclk_hz = 0UL;
+                    g_diag.clock_hz = 0UL;
+                    g_diag.status = DIAG_STATUS_CLOCK_FAIL;
+                    g_diag.switch_rcc_cr = RCC->CR;
+                    g_diag.switch_rcc_cfgr = RCC->CFGR;
+                    g_diag.switch_flash_acr = FLASH->ACR;
+                    for (;;)
+                    {
+                        ++g_diag.fault_loop;
+                        __NOP();
+                    }
+                }
+            }
         }
         else
         {
-            g_diag.preflight_result = 2UL; /* readback mismatch */
+            /* No switch request was issued; retain the known 16 MHz HSI state. */
+            g_diag.switch_result = 4UL;
+            g_diag.switch_sysclk_hz = HSI_VALUE;
+            g_diag.clock_hz = HSI_VALUE;
         }
-    }
-    else
-    {
-        g_diag.preflight_result = 3UL; /* PLL not ready; no SYSCLK change */
-        g_diag.preflight_rcc_cr = RCC->CR;
-        g_diag.preflight_rcc_cfgr = RCC->CFGR;
-        g_diag.preflight_flash_acr = FLASH->ACR;
+
+        (void)fallback_confirmed;
     }
 
-    /* Final capture: must still be HSI 16 MHz; do not touch SW or SysTick. */
-    g_diag.preflight_rcc_cr = RCC->CR;
-    g_diag.preflight_rcc_cfgr = RCC->CFGR;
-    g_diag.preflight_flash_acr = FLASH->ACR;
-    g_diag.preflight_systick_load = SysTick->LOAD;
+    g_diag.switch_rcc_cr = RCC->CR;
+    g_diag.switch_rcc_cfgr = RCC->CFGR;
+    g_diag.switch_flash_acr = FLASH->ACR;
+    g_diag.switch_systick_load = SysTick->LOAD;
 
     g_diag.status = DIAG_STATUS_RUNNING;
 
