@@ -1031,5 +1031,5 @@ int main(void)
     g_stage2d_status = ST_RESET_DONE;
     lcd_init();
     g_stage2d_status = ST_LCD_INIT;
-    run_sdio_diagnostic();
+    run_touch_diagnostic(); /* Isolation build: keep SDIO completely inactive. */
 }
