@@ -1,4 +1,4 @@
-name: JZ-TS35 W25Q32 full read-only dump build
+name: JZ-TS35 STM32 animated LCD HUD diagnostic build
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: jz-ts35-w25q32-dump
+  group: jz-ts35-lcd-animation
   cancel-in-progress: true
 
 permissions:
@@ -30,7 +30,7 @@ jobs:
           sudo apt-get update -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20
           sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi binutils-arm-none-eabi
 
-      - name: Compile STM32F207 LCD + ST-LINK chunked W25Q32 full dump diagnostic
+      - name: Compile STM32F207 animated ILI9486L LCD diagnostic
         shell: bash
         run: |
           set -euo pipefail
@@ -54,39 +54,39 @@ jobs:
           arm-none-eabi-gcc $CPU_FLAGS -nostdlib \
             -Wl,--gc-sections \
             -Wl,--build-id=none \
-            -Wl,-Map="$BUILD_DIR/JZ-TS35-W25Q32-FULL-DUMP.map" \
+            -Wl,-Map="$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.map" \
             -T buildroot/ldscripts/jz_ts35_v2_1_diag.ld \
             "$BUILD_DIR/startup.o" \
             "$BUILD_DIR/diag_main.o" \
             -Wl,--start-group -lgcc -Wl,--end-group \
-            -o "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.elf"
+            -o "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf"
 
           arm-none-eabi-objcopy -O ihex \
-            "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.elf" "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.hex"
+            "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf" "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.hex"
           arm-none-eabi-objcopy -O binary \
-            "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.elf" "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.bin"
+            "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf" "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.bin"
           arm-none-eabi-nm -n \
-            "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.elf" > "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.symbols.txt"
+            "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf" > "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.symbols.txt"
           arm-none-eabi-objdump -h \
-            "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.elf" > "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.sections.txt"
+            "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf" > "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.sections.txt"
 
-          echo "=== W25Q32 JEDEC ID test symbols ==="
+          echo "=== STM32 LCD animation symbols ==="
           grep -E 'g_stage2d_status|g_pixels_written|SysTick_Handler|Reset_Handler| main$' \
-            "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.symbols.txt"
+            "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.symbols.txt"
           echo "=== ELF size ==="
-          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.elf"
+          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf"
           echo "=== ELF sections ==="
-          cat "$BUILD_DIR/JZ-TS35-W25Q32-JEDEC-ID-TEST.sections.txt"
+          cat "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.sections.txt"
 
-      - name: Upload W25Q32 full dump firmware, host utility and debug symbols
+      - name: Upload STM32F207 animated LCD firmware and debug symbols
         uses: actions/upload-artifact@v4
         with:
           name: JZ-TS35-STM32F207-W25Q32-FULL-DUMP
           if-no-files-found: error
           path: |
-            .build/jz-ts35-usart3-tx/JZ-TS35-W25Q32-JEDEC-ID-TEST.elf
-            .build/jz-ts35-usart3-tx/JZ-TS35-W25Q32-JEDEC-ID-TEST.hex
-            .build/jz-ts35-usart3-tx/JZ-TS35-W25Q32-JEDEC-ID-TEST.bin
-            .build/jz-ts35-usart3-tx/JZ-TS35-W25Q32-JEDEC-ID-TEST.map
-            .build/jz-ts35-usart3-tx/JZ-TS35-W25Q32-JEDEC-ID-TEST.symbols.txt
-            .build/jz-ts35-usart3-tx/JZ-TS35-W25Q32-JEDEC-ID-TEST.sections.txt
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.elf
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.hex
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.bin
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.map
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.symbols.txt
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.sections.txt
