@@ -62,31 +62,31 @@ jobs:
             -o "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.elf"
 
           arm-none-eabi-objcopy -O ihex \
-            "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf" "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.hex"
+            "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.elf" "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.hex"
           arm-none-eabi-objcopy -O binary \
-            "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf" "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.bin"
+            "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.elf" "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.bin"
           arm-none-eabi-nm -n \
-            "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf" > "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.symbols.txt"
+            "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.elf" > "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.symbols.txt"
           arm-none-eabi-objdump -h \
-            "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf" > "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.sections.txt"
+            "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.elf" > "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.sections.txt"
 
-          echo "=== STM32 full-screen touch diagnostic symbols ==="
+          echo "=== STM32 SDIO diagnostic symbols ==="
           grep -E 'g_stage2d_status|g_ms|SysTick_Handler|Reset_Handler| main$' \
-            "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.symbols.txt"
+            "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.symbols.txt"
           echo "=== ELF size ==="
-          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf"
+          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.elf"
           echo "=== ELF sections ==="
-          cat "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.sections.txt"
+          cat "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.sections.txt"
 
       - name: Upload STM32F207 SDIO read-only diagnostic firmware and debug symbols
         uses: actions/upload-artifact@v4
         with:
-          name: JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC
+          name: JZ-TS35-STM32F207-SDIO-DIAGNOSTIC
           if-no-files-found: error
           path: |
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.hex
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.bin
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.map
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.symbols.txt
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.sections.txt
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.elf
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.hex
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.bin
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.map
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.symbols.txt
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.sections.txt
