@@ -517,32 +517,45 @@ static void draw_target(uint16_t x, uint16_t y, uint16_t color)
 
 static void draw_touch_screen(void)
 {
-    uint16_t y;
-    /* Full native panel window: 320 columns x 480 rows. */
-    lcd_fill(0x0841U);
-    lcd_fill_rect(0U, 0U, 319U, 479U, 0x0841U);
-    lcd_fill_rect(5U, 5U, 314U, 474U, 0x18E3U);
-    lcd_fill_rect(7U, 7U, 312U, 472U, 0x0841U);
+    uint16_t p;
 
-    /* Header, central touch field, and footer are all inside the full panel. */
-    lcd_fill_rect(14U, 14U, 305U, 58U, 0x10A3U);
-    lcd_fill_rect(14U, 68U, 305U, 407U, 0x0000U);
-    lcd_fill_rect(14U, 416U, 305U, 463U, 0x10A3U);
+    /*
+     * True edge-to-edge test canvas: every pixel of the 320x480 panel is
+     * available to the coordinate test. No header/footer inset reduces it.
+     * Four cardinal targets sit close to the physical panel edges.
+     */
+    lcd_fill(0x0000U);
 
-    /* Grid and five touch targets. */
-    for (y=110U; y<390U; y=(uint16_t)(y+70U))
-        lcd_fill_rect(20U, y, 299U, (uint16_t)(y+1U), 0x2104U);
-    lcd_fill_rect(159U, 78U, 160U, 397U, 0x2104U);
-    draw_target(28U, 82U, 0xF800U);
-    draw_target(291U, 82U, 0xF800U);
-    draw_target(28U, 393U, 0xF800U);
-    draw_target(291U, 393U, 0xF800U);
-    draw_target(160U, 238U, 0xFFE0U);
+    /* One-pixel perimeter and 10-pixel inward edge guides. */
+    lcd_fill_rect(0U, 0U, 319U, 1U, 0xFFFFU);
+    lcd_fill_rect(0U, 478U, 319U, 479U, 0xFFFFU);
+    lcd_fill_rect(0U, 0U, 1U, 479U, 0xFFFFU);
+    lcd_fill_rect(318U, 0U, 319U, 479U, 0xFFFFU);
+    lcd_fill_rect(10U, 10U, 309U, 10U, 0x39E7U);
+    lcd_fill_rect(10U, 469U, 309U, 469U, 0x39E7U);
+    lcd_fill_rect(10U, 10U, 10U, 469U, 0x39E7U);
+    lcd_fill_rect(309U, 10U, 309U, 469U, 0x39E7U);
 
-    /* Footer status bars; live values are also available in the SWD mailbox. */
-    lcd_fill_rect(24U, 427U, 296U, 431U, 0x39E7U);
-    lcd_fill_rect(24U, 440U, 296U, 444U, 0x39E7U);
-    lcd_fill_rect(24U, 452U, 296U, 456U, 0x39E7U);
+    /* Full-area crosshair/grid, not a reduced central touch window. */
+    for (p=40U; p<480U; p=(uint16_t)(p+40U))
+        lcd_fill_rect(2U, p, 317U, (uint16_t)(p+1U), 0x1082U);
+    for (p=40U; p<320U; p=(uint16_t)(p+40U))
+        lcd_fill_rect(p, 2U, (uint16_t)(p+1U), 477U, 0x1082U);
+    lcd_fill_rect(159U, 2U, 160U, 477U, 0x2104U);
+    lcd_fill_rect(2U, 238U, 317U, 239U, 0x2104U);
+
+    /* Cardinal edge targets: TOP, BOTTOM, LEFT, RIGHT; center is yellow. */
+    draw_target(160U, 14U, 0xF800U);  /* TOP */
+    draw_target(160U, 465U, 0x001FU); /* BOTTOM */
+    draw_target(14U, 238U, 0x07E0U);  /* LEFT */
+    draw_target(305U, 238U, 0x07FFU); /* RIGHT */
+    draw_target(160U, 238U, 0xFFE0U); /* CENTER */
+
+    /* Corner witness marks make edge clipping / rotation obvious. */
+    draw_target(14U, 14U, 0xFFFFU);
+    draw_target(305U, 14U, 0xFFFFU);
+    draw_target(14U, 465U, 0xFFFFU);
+    draw_target(305U, 465U, 0xFFFFU);
 }
 
 static uint16_t raw_to_x(uint16_t raw)
@@ -632,18 +645,17 @@ static void run_touch_diagnostic(void)
             __DSB();
 
             if (pressed) {
-                /* Erase prior marker and draw the current raw-coordinate point. */
-                lcd_fill_rect((uint16_t)(last_x > 5U ? last_x-5U : 0U),
-                              (uint16_t)(last_y > 5U ? last_y-5U : 0U),
-                              (uint16_t)(last_x < 314U ? last_x+5U : 319U),
-                              (uint16_t)(last_y < 474U ? last_y+5U : 479U),
-                              0x0000U);
+                /*
+                 * Leave a green trace instead of erasing the previous point:
+                 * this preserves the fixed edge/corner targets underneath and
+                 * makes axis inversion / clipping visible during a swipe.
+                 */
                 last_x = raw_to_x(x);
                 last_y = raw_to_y(y);
-                lcd_fill_rect((uint16_t)(last_x > 4U ? last_x-4U : 0U),
-                              (uint16_t)(last_y > 4U ? last_y-4U : 0U),
-                              (uint16_t)(last_x < 315U ? last_x+4U : 319U),
-                              (uint16_t)(last_y < 475U ? last_y+4U : 479U),
+                lcd_fill_rect((uint16_t)(last_x > 3U ? last_x-3U : 0U),
+                              (uint16_t)(last_y > 3U ? last_y-3U : 0U),
+                              (uint16_t)(last_x < 316U ? last_x+3U : 319U),
+                              (uint16_t)(last_y < 476U ? last_y+3U : 479U),
                               0x07E0U);
             }
 
