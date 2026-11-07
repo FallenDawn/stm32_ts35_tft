@@ -831,7 +831,6 @@ static void clock_init_96mhz(void)
     RCC->CFGR = (RCC->CFGR & ~((15UL<<4)|(7UL<<10)|(7UL<<13)|3UL)) |
                 (4UL<<10) | (2UL);
     while ((RCC->CFGR & (3UL<<2)) != (2UL<<2)) {}
-    SystemCoreClock = 96000000UL;
     SysTick->CTRL = 0U;
     SysTick->LOAD = 95999UL;
     SysTick->VAL = 0U;
