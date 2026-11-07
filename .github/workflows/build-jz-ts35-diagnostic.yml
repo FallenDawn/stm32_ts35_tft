@@ -1,4 +1,4 @@
-name: JZ-TS35 STM32 animated LCD HUD diagnostic build
+name: JZ-TS35 STM32F207 full-screen XPT2046 touch diagnostic build
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: jz-ts35-lcd-animation
+  group: jz-ts35-touch-diagnostic
   cancel-in-progress: true
 
 permissions:
@@ -30,7 +30,7 @@ jobs:
           sudo apt-get update -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20
           sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi binutils-arm-none-eabi
 
-      - name: Compile STM32F207 animated ILI9486L LCD diagnostic
+      - name: Compile STM32F207 full-screen ILI9486L + XPT2046 touch diagnostic
         shell: bash
         run: |
           set -euo pipefail
@@ -54,7 +54,7 @@ jobs:
           arm-none-eabi-gcc $CPU_FLAGS -nostdlib \
             -Wl,--gc-sections \
             -Wl,--build-id=none \
-            -Wl,-Map="$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.map" \
+            -Wl,-Map="$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.map" \
             -T buildroot/ldscripts/jz_ts35_v2_1_diag.ld \
             "$BUILD_DIR/startup.o" \
             "$BUILD_DIR/diag_main.o" \
@@ -70,8 +70,8 @@ jobs:
           arm-none-eabi-objdump -h \
             "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf" > "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.sections.txt"
 
-          echo "=== STM32 LCD animation symbols ==="
-          grep -E 'g_stage2d_status|g_pixels_written|SysTick_Handler|Reset_Handler| main$' \
+          echo "=== STM32 full-screen touch diagnostic symbols ==="
+          grep -E 'g_stage2d_status|g_ms|SysTick_Handler|Reset_Handler| main$' \
             "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.symbols.txt"
           echo "=== ELF size ==="
           arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf"
@@ -81,7 +81,7 @@ jobs:
       - name: Upload STM32F207 animated LCD firmware and debug symbols
         uses: actions/upload-artifact@v4
         with:
-          name: JZ-TS35-STM32F207-W25Q32-FULL-DUMP
+          name: JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC
           if-no-files-found: error
           path: |
             .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.elf
