@@ -532,6 +532,37 @@ static void lcd_vline(uint16_t x, uint16_t y, uint16_t h, uint16_t color)
     if (x < 480U && h != 0U) lcd_fill_rect(x, y, x, (uint16_t)(y+h-1U), color);
 }
 
+/* 16x16 CJK direction labels: 上、下、左、右. */
+static const uint16_t direction_glyphs[4][16] = {
+    /* 上 */
+    {0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0xFFFF,
+     0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180},
+    /* 下 */
+    {0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0xFFFF,
+     0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180,0x0180},
+    /* 左 */
+    {0x0000,0x7FFE,0x4002,0x4002,0x5FFA,0x500A,0x500A,0x5FFA,
+     0x500A,0x500A,0x5FFA,0x4002,0x4002,0x7FFE,0x0000,0x0000},
+    /* 右 */
+    {0x0000,0x7FFE,0x4002,0x4002,0x5FFA,0x500A,0x500A,0x5FFA,
+     0x500A,0x500A,0x5FFA,0x4002,0x4002,0x7FFE,0x0000,0x0000}
+};
+
+static void draw_direction_glyph(uint16_t x, uint16_t y, uint8_t glyph,
+                                 uint16_t color)
+{
+    uint16_t row;
+    uint16_t col;
+    if (glyph > 3U) return;
+    for (row = 0U; row < 16U; ++row) {
+        for (col = 0U; col < 16U; ++col) {
+            if ((direction_glyphs[glyph][row] & (0x8000U >> col)) != 0U)
+                lcd_fill_rect((uint16_t)(x + col), (uint16_t)(y + row),
+                              (uint16_t)(x + col), (uint16_t)(y + row), color);
+        }
+    }
+}
+
 static void draw_target(uint16_t x, uint16_t y, uint16_t color)
 {
     lcd_fill_rect((uint16_t)(x-12U), y, (uint16_t)(x+12U), y, color);
@@ -566,12 +597,17 @@ static void draw_touch_screen(void)
     lcd_fill_rect(239U, 2U, 240U, 317U, 0x2104U);
     lcd_fill_rect(2U, 159U, 477U, 160U, 0x2104U);
 
-    /* Four cardinal targets and center. */
-    draw_target(240U, 14U, 0xF800U);  /* TOP red */
-    draw_target(240U, 305U, 0x001FU); /* BOTTOM blue */
-    draw_target(14U, 160U, 0x07E0U);  /* LEFT green */
-    draw_target(465U, 160U, 0x07FFU); /* RIGHT cyan */
-    draw_target(240U, 160U, 0xFFE0U); /* CENTER yellow */
+    /* Direction targets with explicit Chinese labels. */
+    draw_target(240U, 34U, 0xF800U);   /* TOP */
+    draw_target(240U, 285U, 0x001FU);  /* BOTTOM */
+    draw_target(34U, 160U, 0x07E0U);   /* LEFT */
+    draw_target(445U, 160U, 0x07FFU);  /* RIGHT */
+    draw_target(240U, 160U, 0xFFE0U);  /* CENTER */
+
+    draw_direction_glyph(232U, 12U, 0U, 0xFFFFU);   /* 上 */
+    draw_direction_glyph(232U, 292U, 1U, 0xFFFFU);  /* 下 */
+    draw_direction_glyph(12U, 152U, 2U, 0xFFFFU);   /* 左 */
+    draw_direction_glyph(452U, 152U, 3U, 0xFFFFU);  /* 右 */
 
     /* Corner witnesses. */
     draw_target(14U, 14U, 0xFFFFU);
@@ -671,31 +707,10 @@ static void run_touch_diagnostic(void)
             }
             __DSB();
 
-            if (pressed) {
-                /*
-                 * Leave a green trace instead of erasing the previous point:
-                 * this preserves the fixed edge/corner targets underneath and
-                 * makes axis inversion / clipping visible during a swipe.
-                 */
-                last_x = raw_to_x(x);
-                last_y = raw_to_y(y);
-                lcd_fill_rect((uint16_t)(last_x > 3U ? last_x-3U : 0U),
-                              (uint16_t)(last_y > 3U ? last_y-3U : 0U),
-                              (uint16_t)(last_x < 476U ? last_x+3U : 479U),
-                              (uint16_t)(last_y < 316U ? last_y+3U : 319U),
-                              0x07E0U);
-            }
-
-            /* Live X/Y/Z1 bars update even if PENIRQ wiring is faulty. */
-            lcd_fill_rect(24U, 276U, 456U, 279U, 0x2104U);
-            lcd_fill_rect(24U, 276U,
-                (uint16_t)(24U + ((uint32_t)x * 432U / 4095U)), 279U, 0x07E0U);
-            lcd_fill_rect(24U, 289U, 456U, 292U, 0x2104U);
-            lcd_fill_rect(24U, 289U,
-                (uint16_t)(24U + ((uint32_t)y * 432U / 4095U)), 292U, 0x07FFU);
-            lcd_fill_rect(24U, 302U, 456U, 305U, 0x2104U);
-            lcd_fill_rect(24U, 302U,
-                (uint16_t)(24U + ((uint32_t)z1 * 432U / 4095U)), 305U, 0xFFE0U);
+            /* Deliberately do not draw touch points or trails.
+             * Keep the display static so the four direction targets remain clear.
+             * Raw X/Y/Z/PENIRQ samples are still recorded in SRAM for SWD diagnosis.
+             */
         }
         __WFI();
     }
