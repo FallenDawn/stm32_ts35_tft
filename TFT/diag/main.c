@@ -744,15 +744,12 @@ static void run_touch_diagnostic(void)
                 ++m[8];
                 buzzer_click();
 
-                /* Measured panel-to-LCD transform: the touch axes are
-                 * rotated 90 degrees relative to the landscape LCD.
-                 * Normalized screen X comes from raw Y; screen Y comes from
-                 * inverted raw X. Keep the full 12-bit range for this
-                 * orientation test; calibration endpoints can be refined
-                 * after the four-corner check.
+                /* Test 180-degree touch orientation: both raw axes are
+                 * inverted relative to the landscape LCD. Do not swap axes.
+                 * Confirm all four corners before final endpoint calibration.
                  */
-                dot_x = (uint16_t)(((uint32_t)y * 479UL) / 4095UL);
-                dot_y = (uint16_t)(((4095UL - (uint32_t)x) * 319UL) / 4095UL);
+                dot_x = (uint16_t)(((4095UL - (uint32_t)x) * 479UL) / 4095UL);
+                dot_y = (uint16_t)(((4095UL - (uint32_t)y) * 319UL) / 4095UL);
                 if (dot_x < 5U) dot_x = 5U;
                 if (dot_x > 474U) dot_x = 474U;
                 if (dot_y < 5U) dot_y = 5U;
