@@ -454,7 +454,9 @@ static void touch_gpio_init(void)
     GPIOC->MODER &= ~(3UL << 26U);
     GPIOC->PUPDR = (GPIOC->PUPDR & ~(3UL << 26U)) | (1UL << 26U);
 
-    GPIOE->BSRRL = (uint16_t)((1UL << 3U) | (1UL << 5U) | (1UL << 6U));
+    /* XPT2046 uses SPI mode 0: SCK idles low. */
+    GPIOE->BSRRH = (uint16_t)(1UL << 5U);
+    GPIOE->BSRRL = (uint16_t)((1UL << 3U) | (1UL << 6U));
     __DSB();
 }
 
@@ -470,11 +472,12 @@ static uint8_t touch_spi_transfer(uint8_t tx)
     for (bit = 0U; bit < 8U; ++bit) {
         if ((tx & 0x80U) != 0U) GPIOE->BSRRL = (uint16_t)(1UL << 3U);
         else                    GPIOE->BSRRH = (uint16_t)(1UL << 3U);
-        GPIOE->BSRRH = (uint16_t)(1UL << 5U); /* CPOL=1: falling edge */
+        touch_spi_delay();
+        GPIOE->BSRRL = (uint16_t)(1UL << 5U); /* rising edge: sample */
         touch_spi_delay();
         rx = (uint8_t)((rx << 1U) |
              ((GPIOE->IDR & (1UL << 4U)) != 0U ? 1U : 0U));
-        GPIOE->BSRRL = (uint16_t)(1UL << 5U); /* rising edge */
+        GPIOE->BSRRH = (uint16_t)(1UL << 5U); /* falling edge */
         touch_spi_delay();
         tx <<= 1U;
     }
@@ -489,7 +492,8 @@ static uint16_t touch_read_adc(uint8_t command)
     value = (uint16_t)touch_spi_transfer(0xFFU) << 8U;
     value |= touch_spi_transfer(0xFFU);
     GPIOE->BSRRL = (uint16_t)(1UL << 6U); /* CS high */
-    return (uint16_t)(value >> 4U);
+    /* XPT2046: discard the leading null bit and 3 trailing clock bits. */
+    return (uint16_t)((value >> 3U) & 0x0FFFU);
 }
 
 static uint8_t touch_is_pressed(void)
@@ -599,23 +603,30 @@ static void run_touch_diagnostic(void)
     draw_touch_screen();
 
     for (;;) {
-        pressed = touch_is_pressed();
-        if (pressed != was_pressed) {
-            if (pressed) ++m[8];
-            else         ++m[9];
-            was_pressed = pressed;
-            __DSB();
-        }
-
         if ((uint32_t)(g_ms - last_sample) >= 25U) {
             last_sample = g_ms;
-            if (pressed) {
-                x  = touch_read_adc(0xD0U); /* X */
-                y  = touch_read_adc(0x90U); /* Y */
-                z1 = touch_read_adc(0xB0U); /* pressure Z1 */
-                z2 = touch_read_adc(0xC0U); /* pressure Z2 */
-                record_touch(x, y, z1, z2, 1U);
 
+            /* Poll ADC continuously, even when PENIRQ is not asserted.
+             * This separates a bad PENIRQ wire/polarity from an SPI failure. */
+            x  = touch_read_adc(0xD0U); /* X */
+            y  = touch_read_adc(0x90U); /* Y */
+            z1 = touch_read_adc(0xB0U); /* pressure Z1 */
+            z2 = touch_read_adc(0xC0U); /* pressure Z2 */
+            pressed = (uint8_t)(touch_is_pressed() ||
+                                (z1 > 40U && z2 < 4000U));
+
+            m[13] = (GPIOC->IDR >> 13U) & 1U; /* PENIRQ raw: 0=asserted */
+            m[14] = (GPIOE->IDR >> 4U) & 1U;  /* MISO raw */
+            record_touch(x, y, z1, z2, pressed);
+
+            if (pressed != was_pressed) {
+                if (pressed) ++m[8];
+                else         ++m[9];
+                was_pressed = pressed;
+            }
+            __DSB();
+
+            if (pressed) {
                 /* Erase prior marker and draw the current raw-coordinate point. */
                 lcd_fill_rect((uint16_t)(last_x > 5U ? last_x-5U : 0U),
                               (uint16_t)(last_y > 5U ? last_y-5U : 0U),
@@ -629,17 +640,18 @@ static void run_touch_diagnostic(void)
                               (uint16_t)(last_x < 315U ? last_x+4U : 319U),
                               (uint16_t)(last_y < 475U ? last_y+4U : 479U),
                               0x07E0U);
-                /* Simple visual activity bars for X, Y and pressure. */
-                lcd_fill_rect(24U, 427U, 296U, 431U, 0x2104U);
-                lcd_fill_rect(24U, 427U,
-                    (uint16_t)(24U + ((uint32_t)x * 272U / 4095U)), 431U, 0x07E0U);
-                lcd_fill_rect(24U, 440U, 296U, 444U, 0x2104U);
-                lcd_fill_rect(24U, 440U,
-                    (uint16_t)(24U + ((uint32_t)y * 272U / 4095U)), 444U, 0x07FFU);
-                lcd_fill_rect(24U, 452U, 296U, 456U, 0x2104U);
-                lcd_fill_rect(24U, 452U,
-                    (uint16_t)(24U + ((uint32_t)z1 * 272U / 4095U)), 456U, 0xFFE0U);
             }
+
+            /* Live X/Y/Z1 bars update even if PENIRQ wiring is faulty. */
+            lcd_fill_rect(24U, 427U, 296U, 431U, 0x2104U);
+            lcd_fill_rect(24U, 427U,
+                (uint16_t)(24U + ((uint32_t)x * 272U / 4095U)), 431U, 0x07E0U);
+            lcd_fill_rect(24U, 440U, 296U, 444U, 0x2104U);
+            lcd_fill_rect(24U, 440U,
+                (uint16_t)(24U + ((uint32_t)y * 272U / 4095U)), 444U, 0x07FFU);
+            lcd_fill_rect(24U, 452U, 296U, 456U, 0x2104U);
+            lcd_fill_rect(24U, 452U,
+                (uint16_t)(24U + ((uint32_t)z1 * 272U / 4095U)), 456U, 0xFFE0U);
         }
         __WFI();
     }
