@@ -616,18 +616,6 @@ static void draw_touch_screen(void)
     draw_target(465U, 305U, 0xFFFFU);
 }
 
-static uint16_t raw_to_x(uint16_t raw)
-{
-    if (raw > 4095U) raw = 4095U;
-    return (uint16_t)(((uint32_t)raw * 479U) / 4095U);
-}
-
-static uint16_t raw_to_y(uint16_t raw)
-{
-    if (raw > 4095U) raw = 4095U;
-    return (uint16_t)(((uint32_t)raw * 319U) / 4095U);
-}
-
 static void record_touch(uint16_t x, uint16_t y, uint16_t z1, uint16_t z2,
                          uint32_t pressed)
 {
@@ -652,7 +640,6 @@ static void record_touch(uint16_t x, uint16_t y, uint16_t z1, uint16_t z2,
 
 static void run_touch_diagnostic(void)
 {
-    uint16_t last_x = 160U, last_y = 238U;
     uint16_t x, y, z1, z2;
     uint8_t was_pressed = 0U, pressed;
     uint32_t last_sample = 0U;
