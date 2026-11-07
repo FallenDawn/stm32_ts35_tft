@@ -427,9 +427,11 @@ static void draw_static_hud(void)
     lcd_fill_rect(22U,458U,285U,459U,0x39E7);
 }
 
-/* XPT2046 pins from the repository's JZ_TS35_V2_1 board definition:
- * PE6=/CS, PE5=SCK, PE4=MISO, PE3=MOSI, PC13=PENIRQ (active low).
- * SPI mode 3, software bit-bang; no UART and no external flash access.
+/* XPT2046 wiring measured directly by the user on JZ-TS35 V2.1:
+ * Pin 11 PENIRQ -> PB3; pin 12 DOUT/MISO -> PB9;
+ * pin 14 DIN/MOSI -> PB6; pin 15 CS -> PB8; pin 16 DCLK/SCK -> PB5.
+ * Pins 2..5 connect to FPC 1..4 (analog panel electrodes).
+ * SPI mode 0, software bit-bang. LCD/FSMC remains unchanged.
  */
 #define TOUCH_RECORDS ((volatile uint32_t *)0x20010000UL)
 #define TOUCH_MAILBOX ((volatile uint32_t *)0x2001F000UL)
@@ -438,25 +440,24 @@ static void draw_static_hud(void)
 
 static void touch_gpio_init(void)
 {
-    RCC->AHB1ENR |= (1UL << 2) | (1UL << 4); /* GPIOC, GPIOE */
+    RCC->AHB1ENR |= (1UL << 1); /* GPIOB clock */
     (void)RCC->AHB1ENR;
 
-    /* PE3 MOSI, PE5 SCK, PE6 CS outputs; PE4 MISO input. */
-    GPIOE->MODER &= ~((3UL << 6U) | (3UL << 8U) |
-                      (3UL << 10U) | (3UL << 12U));
-    GPIOE->MODER |=  (1UL << 6U) | (1UL << 10U) | (1UL << 12U);
-    GPIOE->OTYPER &= ~((1UL << 3U) | (1UL << 5U) | (1UL << 6U));
-    GPIOE->OSPEEDR |= (3UL << 6U) | (3UL << 10U) | (3UL << 12U);
-    GPIOE->PUPDR &= ~((3UL << 6U) | (3UL << 8U) |
-                      (3UL << 10U) | (3UL << 12U));
+    /* PB5=SCK, PB6=MOSI, PB8=CS outputs; PB9=MISO and PB3=PENIRQ inputs. */
+    GPIOB->MODER &= ~((3UL << 6U) | (3UL << 10U) | (3UL << 12U) |
+                      (3UL << 16U) | (3UL << 18U));
+    GPIOB->MODER |=  (1UL << 10U) | (1UL << 12U) | (1UL << 16U);
+    GPIOB->OTYPER &= ~((1UL << 5U) | (1UL << 6U) | (1UL << 8U));
+    GPIOB->OSPEEDR |= (3UL << 10U) | (3UL << 12U) | (3UL << 16U);
+    GPIOB->PUPDR &= ~((3UL << 6U) | (3UL << 10U) | (3UL << 12U) |
+                      (3UL << 16U) | (3UL << 18U));
 
-    /* PC13 PENIRQ input with pull-up. */
-    GPIOC->MODER &= ~(3UL << 26U);
-    GPIOC->PUPDR = (GPIOC->PUPDR & ~(3UL << 26U)) | (1UL << 26U);
+    /* PENIRQ PB3 active-low input with pull-up; MISO PB9 floating input. */
+    GPIOB->PUPDR |= (1UL << 6U);
 
-    /* XPT2046 uses SPI mode 0: SCK idles low. */
-    GPIOE->BSRRH = (uint16_t)(1UL << 5U);
-    GPIOE->BSRRL = (uint16_t)((1UL << 3U) | (1UL << 6U));
+    /* PB3 is GPIO input; SWD on PA13/PA14 remains untouched. */
+    GPIOB->BSRRL = (uint16_t)(1UL << 8U); /* CS high */
+    GPIOB->BSRRH = (uint16_t)((1UL << 5U) | (1UL << 6U)); /* SCK/MOSI low */
     __DSB();
 }
 
@@ -470,14 +471,14 @@ static uint8_t touch_spi_transfer(uint8_t tx)
     uint8_t rx = 0U;
     uint32_t bit;
     for (bit = 0U; bit < 8U; ++bit) {
-        if ((tx & 0x80U) != 0U) GPIOE->BSRRL = (uint16_t)(1UL << 3U);
-        else                    GPIOE->BSRRH = (uint16_t)(1UL << 3U);
+        if ((tx & 0x80U) != 0U) GPIOB->BSRRL = (uint16_t)(1UL << 6U);
+        else                    GPIOB->BSRRH = (uint16_t)(1UL << 6U);
         touch_spi_delay();
-        GPIOE->BSRRL = (uint16_t)(1UL << 5U); /* rising edge: sample */
+        GPIOB->BSRRL = (uint16_t)(1UL << 5U); /* rising edge: sample */
         touch_spi_delay();
         rx = (uint8_t)((rx << 1U) |
-             ((GPIOE->IDR & (1UL << 4U)) != 0U ? 1U : 0U));
-        GPIOE->BSRRH = (uint16_t)(1UL << 5U); /* falling edge */
+             ((GPIOB->IDR & (1UL << 9U)) != 0U ? 1U : 0U));
+        GPIOB->BSRRH = (uint16_t)(1UL << 5U); /* falling edge */
         touch_spi_delay();
         tx <<= 1U;
     }
@@ -487,18 +488,18 @@ static uint8_t touch_spi_transfer(uint8_t tx)
 static uint16_t touch_read_adc(uint8_t command)
 {
     uint16_t value;
-    GPIOE->BSRRH = (uint16_t)(1UL << 6U); /* CS low */
+    GPIOB->BSRRH = (uint16_t)(1UL << 8U); /* CS low */
     (void)touch_spi_transfer(command);
     value = (uint16_t)touch_spi_transfer(0xFFU) << 8U;
     value |= touch_spi_transfer(0xFFU);
-    GPIOE->BSRRL = (uint16_t)(1UL << 6U); /* CS high */
+    GPIOB->BSRRL = (uint16_t)(1UL << 8U); /* CS high */
     /* XPT2046: discard the leading null bit and 3 trailing clock bits. */
     return (uint16_t)((value >> 3U) & 0x0FFFU);
 }
 
 static uint8_t touch_is_pressed(void)
 {
-    return (GPIOC->IDR & (1UL << 13U)) == 0U;
+    return (GPIOB->IDR & (1UL << 3U)) == 0U;
 }
 
 static void lcd_vline(uint16_t x, uint16_t y, uint16_t h, uint16_t color)
@@ -597,7 +598,8 @@ static void run_touch_diagnostic(void)
     m[10] = 0x08U; /* MADCTL */
     m[11] = 320U;
     m[12] = 480U;
-    m[13] = 0U;
+    m[13] = 0U; m[14] = 0U; m[15] = 0U; m[16] = 0U; m[17] = 0U;
+    m[18] = 0U; m[19] = 0U;
     __DSB();
 
     draw_touch_screen();
@@ -615,8 +617,11 @@ static void run_touch_diagnostic(void)
             pressed = (uint8_t)(touch_is_pressed() ||
                                 (z1 > 40U && z2 < 4000U));
 
-            m[13] = (GPIOC->IDR >> 13U) & 1U; /* PENIRQ raw: 0=asserted */
-            m[14] = (GPIOE->IDR >> 4U) & 1U;  /* MISO raw */
+            m[13] = (GPIOB->IDR >> 3U) & 1U; /* PB3/PENIRQ raw: 0=asserted */
+            m[14] = (GPIOB->IDR >> 9U) & 1U; /* PB9/MISO raw */
+            m[15] = (GPIOB->IDR >> 5U) & 1U; /* PB5/SCK level */
+            m[16] = (GPIOB->IDR >> 6U) & 1U; /* PB6/MOSI level */
+            m[17] = (GPIOB->IDR >> 8U) & 1U; /* PB8/CS level */
             record_touch(x, y, z1, z2, pressed);
 
             if (pressed != was_pressed) {
