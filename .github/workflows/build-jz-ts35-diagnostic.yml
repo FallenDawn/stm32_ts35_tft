@@ -1,4 +1,4 @@
-name: JZ-TS35 STM32F207 full-screen XPT2046 touch diagnostic build
+name: JZ-TS35 STM32F207 XPT2046 SPI mode-0 polling diagnostic build
 
 on:
   push:
@@ -30,7 +30,7 @@ jobs:
           sudo apt-get update -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20
           sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi binutils-arm-none-eabi
 
-      - name: Compile STM32F207 full-screen ILI9486L + XPT2046 touch diagnostic
+      - name: Compile STM32F207 ILI9486L + XPT2046 SPI mode-0 polling diagnostic
         shell: bash
         run: |
           set -euo pipefail
@@ -59,34 +59,34 @@ jobs:
             "$BUILD_DIR/startup.o" \
             "$BUILD_DIR/diag_main.o" \
             -Wl,--start-group -lgcc -Wl,--end-group \
-            -o "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf"
+            -o "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf"
 
           arm-none-eabi-objcopy -O ihex \
-            "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf" "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.hex"
+            "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf" "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.hex"
           arm-none-eabi-objcopy -O binary \
-            "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf" "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.bin"
+            "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf" "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.bin"
           arm-none-eabi-nm -n \
-            "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf" > "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.symbols.txt"
+            "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf" > "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.symbols.txt"
           arm-none-eabi-objdump -h \
-            "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf" > "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.sections.txt"
+            "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf" > "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.sections.txt"
 
           echo "=== STM32 full-screen touch diagnostic symbols ==="
           grep -E 'g_stage2d_status|g_ms|SysTick_Handler|Reset_Handler| main$' \
-            "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.symbols.txt"
+            "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.symbols.txt"
           echo "=== ELF size ==="
-          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.elf"
+          arm-none-eabi-size "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf"
           echo "=== ELF sections ==="
-          cat "$BUILD_DIR/JZ-TS35-STM32F207-LCD-ANIMATION.sections.txt"
+          cat "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.sections.txt"
 
-      - name: Upload STM32F207 animated LCD firmware and debug symbols
+      - name: Upload STM32F207 XPT2046 touch diagnostic firmware and debug symbols
         uses: actions/upload-artifact@v4
         with:
           name: JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC
           if-no-files-found: error
           path: |
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.elf
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.hex
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.bin
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.map
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.symbols.txt
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-LCD-ANIMATION.sections.txt
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.hex
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.bin
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.map
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.symbols.txt
+            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.sections.txt
