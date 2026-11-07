@@ -192,7 +192,7 @@ static void lcd_init(void)
     LCD_DATA(0x24); LCD_DATA(0x20); LCD_DATA(0x00);
 
     lcd_write_cmd_data(0x20, 0x00); /* Inversion off */
-    lcd_write_cmd_data(0x36, 0x28); /* Preserve previous orientation/BGR setting */
+    lcd_write_cmd_data(0x36, 0x08); /* Portrait 320x480, BGR; MV=0 */
     LCD_CMD(0x29);                 /* Display on */
     delay_ms(150U);
 }
@@ -426,38 +426,239 @@ static void draw_static_hud(void)
     lcd_fill_rect(22U,450U,105U,453U,0x07E0);
     lcd_fill_rect(22U,458U,285U,459U,0x39E7);
 }
-static void run_screen_animation(void)
+
+/* XPT2046 pins from the repository's JZ_TS35_V2_1 board definition:
+ * PE6=/CS, PE5=SCK, PE4=MISO, PE3=MOSI, PC13=PENIRQ (active low).
+ * SPI mode 3, software bit-bang; no UART and no external flash access.
+ */
+#define TOUCH_RECORDS ((volatile uint32_t *)0x20010000UL)
+#define TOUCH_MAILBOX ((volatile uint32_t *)0x2001F000UL)
+#define TOUCH_RECORD_CAPACITY 256UL
+#define TOUCH_MAGIC 0x54504348UL
+
+static void touch_gpio_init(void)
 {
-    uint16_t frame=0U, old_y=92U, old_x=24U, y, x, bar;
-    draw_static_hud();
+    RCC->AHB1ENR |= (1UL << 2) | (1UL << 4); /* GPIOC, GPIOE */
+    (void)RCC->AHB1ENR;
+
+    /* PE3 MOSI, PE5 SCK, PE6 CS outputs; PE4 MISO input. */
+    GPIOE->MODER &= ~((3UL << 6U) | (3UL << 8U) |
+                      (3UL << 10U) | (3UL << 12U));
+    GPIOE->MODER |=  (1UL << 6U) | (1UL << 10U) | (1UL << 12U);
+    GPIOE->OTYPER &= ~((1UL << 3U) | (1UL << 5U) | (1UL << 6U));
+    GPIOE->OSPEEDR |= (3UL << 6U) | (3UL << 10U) | (3UL << 12U);
+    GPIOE->PUPDR &= ~((3UL << 6U) | (3UL << 8U) |
+                      (3UL << 10U) | (3UL << 12U));
+
+    /* PC13 PENIRQ input with pull-up. */
+    GPIOC->MODER &= ~(3UL << 26U);
+    GPIOC->PUPDR = (GPIOC->PUPDR & ~(3UL << 26U)) | (1UL << 26U);
+
+    GPIOE->BSRRL = (uint16_t)((1UL << 3U) | (1UL << 5U) | (1UL << 6U));
+    __DSB();
+}
+
+static void touch_spi_delay(void)
+{
+    __NOP(); __NOP(); __NOP(); __NOP();
+}
+
+static uint8_t touch_spi_transfer(uint8_t tx)
+{
+    uint8_t rx = 0U;
+    uint32_t bit;
+    for (bit = 0U; bit < 8U; ++bit) {
+        if ((tx & 0x80U) != 0U) GPIOE->BSRRL = (uint16_t)(1UL << 3U);
+        else                    GPIOE->BSRRH = (uint16_t)(1UL << 3U);
+        GPIOE->BSRRH = (uint16_t)(1UL << 5U); /* CPOL=1: falling edge */
+        touch_spi_delay();
+        rx = (uint8_t)((rx << 1U) |
+             ((GPIOE->IDR & (1UL << 4U)) != 0U ? 1U : 0U));
+        GPIOE->BSRRL = (uint16_t)(1UL << 5U); /* rising edge */
+        touch_spi_delay();
+        tx <<= 1U;
+    }
+    return rx;
+}
+
+static uint16_t touch_read_adc(uint8_t command)
+{
+    uint16_t value;
+    GPIOE->BSRRH = (uint16_t)(1UL << 6U); /* CS low */
+    (void)touch_spi_transfer(command);
+    value = (uint16_t)touch_spi_transfer(0xFFU) << 8U;
+    value |= touch_spi_transfer(0xFFU);
+    GPIOE->BSRRL = (uint16_t)(1UL << 6U); /* CS high */
+    return (uint16_t)(value >> 4U);
+}
+
+static uint8_t touch_is_pressed(void)
+{
+    return (GPIOC->IDR & (1UL << 13U)) == 0U;
+}
+
+static void lcd_vline(uint16_t x, uint16_t y, uint16_t h, uint16_t color)
+{
+    if (x < 320U && h != 0U) lcd_fill_rect(x, y, x, (uint16_t)(y+h-1U), color);
+}
+
+static void draw_target(uint16_t x, uint16_t y, uint16_t color)
+{
+    lcd_fill_rect((uint16_t)(x-12U), y, (uint16_t)(x+12U), y, color);
+    lcd_fill_rect(x, (uint16_t)(y-12U), x, (uint16_t)(y+12U), color);
+    lcd_fill_rect((uint16_t)(x-3U), (uint16_t)(y-3U),
+                  (uint16_t)(x+3U), (uint16_t)(y+3U), color);
+}
+
+static void draw_touch_screen(void)
+{
+    uint16_t y;
+    /* Full native panel window: 320 columns x 480 rows. */
+    lcd_fill(0x0841U);
+    lcd_fill_rect(0U, 0U, 319U, 479U, 0x0841U);
+    lcd_fill_rect(5U, 5U, 314U, 474U, 0x18E3U);
+    lcd_fill_rect(7U, 7U, 312U, 472U, 0x0841U);
+
+    /* Header, central touch field, and footer are all inside the full panel. */
+    lcd_fill_rect(14U, 14U, 305U, 58U, 0x10A3U);
+    lcd_fill_rect(14U, 68U, 305U, 407U, 0x0000U);
+    lcd_fill_rect(14U, 416U, 305U, 463U, 0x10A3U);
+
+    /* Grid and five touch targets. */
+    for (y=110U; y<390U; y=(uint16_t)(y+70U))
+        lcd_fill_rect(20U, y, 299U, (uint16_t)(y+1U), 0x2104U);
+    lcd_fill_rect(159U, 78U, 160U, 397U, 0x2104U);
+    draw_target(28U, 82U, 0xF800U);
+    draw_target(291U, 82U, 0xF800U);
+    draw_target(28U, 393U, 0xF800U);
+    draw_target(291U, 393U, 0xF800U);
+    draw_target(160U, 238U, 0xFFE0U);
+
+    /* Footer status bars; live values are also available in the SWD mailbox. */
+    lcd_fill_rect(24U, 427U, 296U, 431U, 0x39E7U);
+    lcd_fill_rect(24U, 440U, 296U, 444U, 0x39E7U);
+    lcd_fill_rect(24U, 452U, 296U, 456U, 0x39E7U);
+}
+
+static uint16_t raw_to_x(uint16_t raw)
+{
+    if (raw > 4095U) raw = 4095U;
+    return (uint16_t)(((uint32_t)raw * 319U) / 4095U);
+}
+
+static uint16_t raw_to_y(uint16_t raw)
+{
+    if (raw > 4095U) raw = 4095U;
+    return (uint16_t)(((uint32_t)raw * 479U) / 4095U);
+}
+
+static void record_touch(uint16_t x, uint16_t y, uint16_t z1, uint16_t z2,
+                         uint32_t pressed)
+{
+    volatile uint32_t *m = TOUCH_MAILBOX;
+    uint32_t index = m[3];
+    uint32_t total = m[2] + 1U;
+    m[2] = total;
+
+    if (index < TOUCH_RECORD_CAPACITY) {
+        volatile uint32_t *r = &TOUCH_RECORDS[index * 6U];
+        r[0] = x;
+        r[1] = y;
+        r[2] = z1;
+        r[3] = z2;
+        r[4] = g_ms;
+        r[5] = pressed;
+        m[3] = index + 1U;
+    }
+    m[4] = x; m[5] = y; m[6] = z1; m[7] = z2;
+    __DSB();
+}
+
+static void run_touch_diagnostic(void)
+{
+    uint16_t last_x = 160U, last_y = 238U;
+    uint16_t x, y, z1, z2;
+    uint8_t was_pressed = 0U, pressed;
+    uint32_t last_sample = 0U;
+    volatile uint32_t *m = TOUCH_MAILBOX;
+
+    touch_gpio_init();
+    m[0] = TOUCH_MAGIC;
+    m[1] = 1U; /* running */
+    m[2] = 0U; /* total samples */
+    m[3] = 0U; /* stored records */
+    m[4] = 0U; m[5] = 0U; m[6] = 0U; m[7] = 0U;
+    m[8] = 0U; /* press transitions */
+    m[9] = 0U; /* release transitions */
+    m[10] = 0x08U; /* MADCTL */
+    m[11] = 320U;
+    m[12] = 480U;
+    m[13] = 0U;
+    __DSB();
+
+    draw_touch_screen();
+
     for (;;) {
-        lcd_fill_rect(22U,old_y,298U,(uint16_t)(old_y+3U),0x0000);
-        lcd_fill_rect(old_x,180U,(uint16_t)(old_x+27U),196U,0x0000);
-        y=(uint16_t)(92U+((frame*5U)%300U));
-        x=(uint16_t)(24U+((frame*7U)%245U));
-        bar=(uint16_t)(20U+((frame*3U)%250U));
-        draw_hline(22U,y,276U,0x03EF);
-        draw_hline(22U,(uint16_t)(y+1U),276U,0x01A8);
-        lcd_fill_rect(x,180U,(uint16_t)(x+27U),196U,0x07FF);
-        lcd_fill_rect((uint16_t)(x+5U),184U,(uint16_t)(x+22U),192U,0xFFFF);
-        lcd_fill_rect(22U,450U,285U,453U,0x2104);
-        lcd_fill_rect(22U,450U,(uint16_t)(22U+bar),453U,0x07E0);
-        old_y=y; old_x=x; ++frame;
-        delay_ms(35U);
+        pressed = touch_is_pressed();
+        if (pressed != was_pressed) {
+            if (pressed) ++m[8];
+            else         ++m[9];
+            was_pressed = pressed;
+            __DSB();
+        }
+
+        if ((uint32_t)(g_ms - last_sample) >= 25U) {
+            last_sample = g_ms;
+            if (pressed) {
+                x  = touch_read_adc(0xD0U); /* X */
+                y  = touch_read_adc(0x90U); /* Y */
+                z1 = touch_read_adc(0xB0U); /* pressure Z1 */
+                z2 = touch_read_adc(0xC0U); /* pressure Z2 */
+                record_touch(x, y, z1, z2, 1U);
+
+                /* Erase prior marker and draw the current raw-coordinate point. */
+                lcd_fill_rect((uint16_t)(last_x > 5U ? last_x-5U : 0U),
+                              (uint16_t)(last_y > 5U ? last_y-5U : 0U),
+                              (uint16_t)(last_x < 314U ? last_x+5U : 319U),
+                              (uint16_t)(last_y < 474U ? last_y+5U : 479U),
+                              0x0000U);
+                last_x = raw_to_x(x);
+                last_y = raw_to_y(y);
+                lcd_fill_rect((uint16_t)(last_x > 4U ? last_x-4U : 0U),
+                              (uint16_t)(last_y > 4U ? last_y-4U : 0U),
+                              (uint16_t)(last_x < 315U ? last_x+4U : 319U),
+                              (uint16_t)(last_y < 475U ? last_y+4U : 479U),
+                              0x07E0U);
+                /* Simple visual activity bars for X, Y and pressure. */
+                lcd_fill_rect(24U, 427U, 296U, 431U, 0x2104U);
+                lcd_fill_rect(24U, 427U,
+                    (uint16_t)(24U + ((uint32_t)x * 272U / 4095U)), 431U, 0x07E0U);
+                lcd_fill_rect(24U, 440U, 296U, 444U, 0x2104U);
+                lcd_fill_rect(24U, 440U,
+                    (uint16_t)(24U + ((uint32_t)y * 272U / 4095U)), 444U, 0x07FFU);
+                lcd_fill_rect(24U, 452U, 296U, 456U, 0x2104U);
+                lcd_fill_rect(24U, 452U,
+                    (uint16_t)(24U + ((uint32_t)z1 * 272U / 4095U)), 456U, 0xFFE0U);
+            }
+        }
+        __WFI();
     }
 }
+
 int main(void)
 {
-    g_stage2d_status=ST_BOOT;
+    g_stage2d_status = ST_BOOT;
     backlight_init();
-    if (SysTick_Config(HSI_VALUE/1000UL)!=0UL) for (;;) __NOP();
+    if (SysTick_Config(HSI_VALUE / 1000UL) != 0UL) {
+        for (;;) __NOP();
+    }
     lcd_reset_gpio_init();
     fsmc_gpio_init();
     fsmc_init();
-    g_stage2d_status=ST_FSMC_READY;
+    g_stage2d_status = ST_FSMC_READY;
     lcd_hardware_reset();
-    g_stage2d_status=ST_RESET_DONE;
+    g_stage2d_status = ST_RESET_DONE;
     lcd_init();
-    g_stage2d_status=ST_LCD_INIT;
-    run_screen_animation();
+    g_stage2d_status = ST_LCD_INIT;
+    run_touch_diagnostic();
 }
