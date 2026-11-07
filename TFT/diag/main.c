@@ -823,7 +823,7 @@ static void run_touch_diagnostic(void)
 static void clock_init_96mhz(void)
 {
     /* HSI 16 MHz -> PLL VCO 192 MHz, SYSCLK 96 MHz, PLLQ 48 MHz. */
-    RCC->CR |= (1UL<<16); /* HSE is not required; HSI feeds PLL. */
+    /* Keep HSE disabled; HSI feeds PLL. */
     RCC->PLLCFGR = 16UL | (192UL<<6) | (0UL<<16) | (4UL<<24);
     RCC->CR |= (1UL<<24);
     while ((RCC->CR & (1UL<<25)) == 0U) {}
@@ -876,7 +876,7 @@ static uint32_t sdio_command(uint8_t index, uint32_t argument, uint32_t response
     sta = SDIO_STA;
     SDIO_MAILBOX[10] = sta;
     if (sta & SDIO_CMD_CTIMEOUT) return 1U;
-    if ((sta & SDIO_CMD_CCRCFAIL) && response != 0U) return 2U;
+    if ((sta & SDIO_CMD_CCRCFAIL) && response != 0U && index != 41U) return 2U; /* R3 has no CRC */
     if (response != 0U && !(sta & (SDIO_CMD_CMDREND|SDIO_CMD_CCRCFAIL))) return 3U;
     if (response == 0U && !(sta & SDIO_CMD_CMDSENT)) return 4U;
     return 0U;
@@ -951,7 +951,7 @@ static void run_sdio_diagnostic(void)
     m[6]=ocr;
     if((ocr & (1UL<<31))==0U) { err=0x301U; goto fail; }
 
-    err=sdio_command(2U,0U,1UL<<6); /* CMD2, CID */
+    err=sdio_command(2U,0U,3UL<<6); /* CMD2, long response CID */
     if(err) goto fail;
     m[7]=SDIO_RESP1; m[8]=SDIO_RESP2; m[9]=SDIO_RESP3; m[11]=SDIO_RESP4;
 
@@ -959,7 +959,7 @@ static void run_sdio_diagnostic(void)
     if(err) goto fail;
     rca=SDIO_RESP1>>16;
     m[12]=rca;
-    err=sdio_command(9U,rca<<16,1UL<<6); /* CMD9, CSD */
+    err=sdio_command(9U,rca<<16,3UL<<6); /* CMD9, long response CSD */
     if(err) goto fail;
     m[13]=SDIO_RESP1; m[14]=SDIO_RESP2; m[15]=SDIO_RESP3; m[16]=SDIO_RESP4;
 
