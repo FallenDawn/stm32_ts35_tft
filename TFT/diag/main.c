@@ -874,7 +874,7 @@ static uint32_t sdio_command(uint8_t index, uint32_t argument, uint32_t response
             break;
     }
     sta = SDIO_STA;
-    SDIO_MAILBOX[10] = sta;
+    SDIO_MAILBOX[30] = sta;
     if (sta & SDIO_CMD_CTIMEOUT) return 1U;
     if ((sta & SDIO_CMD_CCRCFAIL) && response != 0U && index != 41U) return 2U; /* R3 has no CRC */
     if (response != 0U && !(sta & (SDIO_CMD_CMDREND|SDIO_CMD_CCRCFAIL))) return 3U;
@@ -920,6 +920,26 @@ static uint32_t sdio_read_block0(void)
     return 0U;
 }
 
+static void sdio_draw_start_screen(void)
+{
+    /* Keep a visible LCD witness while SDIO runs; LCD init alone does not draw. */
+    lcd_fill(0x0000U);
+    lcd_fill_rect(0U, 0U, 479U, 11U, 0x07FFU);
+    lcd_fill_rect(16U, 36U, 463U, 42U, 0xFFFFU);
+    lcd_fill_rect(16U, 62U, 350U, 68U, 0x7DFFU);
+    lcd_fill_rect(16U, 104U, 463U, 108U, 0x2104U);
+    lcd_fill_rect(16U, 104U, 90U, 108U, 0xFFE0U);
+    lcd_fill_rect(16U, 280U, 463U, 287U, 0x18E3U);
+}
+
+static void sdio_draw_result(uint8_t passed)
+{
+    lcd_fill_rect(16U, 130U, 463U, 166U, passed ? 0x07E0U : 0xF800U);
+    lcd_fill_rect(16U, 190U, 463U, 198U, passed ? 0x07E0U : 0xF800U);
+    lcd_fill_rect(16U, 210U, 463U, 218U, passed ? 0x07E0U : 0xF800U);
+    lcd_fill_rect(16U, 280U, 463U, 287U, passed ? 0x07E0U : 0xF800U);
+}
+
 static void run_sdio_diagnostic(void)
 {
     volatile uint32_t *m = SDIO_MAILBOX;
@@ -928,6 +948,7 @@ static void run_sdio_diagnostic(void)
     for(i=1U;i<32U;i++) m[i]=0U;
     m[1]=1U; /* running */
     __DSB();
+    sdio_draw_start_screen();
 
     clock_init_96mhz();
     sdio_gpio_init();
@@ -983,6 +1004,7 @@ static void run_sdio_diagnostic(void)
     for(i=0U;i<128U;i++) m[24]^=SDIO_SECTOR0[i];
     m[1]=2U; /* PASS */
     m[25]=0x50415353UL;
+    sdio_draw_result(1U);
     __DSB();
     for(;;) __WFI();
 
@@ -992,6 +1014,7 @@ fail:
     m[27]=SDIO_STA;
     m[28]=SDIO_CLKCR;
     m[29]=SDIO_POWER;
+    sdio_draw_result(0U);
     __DSB();
     for(;;) __WFI();
 }
