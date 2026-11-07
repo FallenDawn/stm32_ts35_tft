@@ -579,6 +579,47 @@ static void draw_target(uint16_t x, uint16_t y, uint16_t color)
                   (uint16_t)(x+3U), (uint16_t)(y+3U), color);
 }
 
+/* Compact 5x7 ASCII font for TOP / LEFT / RIGHT labels. */
+static const uint8_t ascii_5x7[10][5] = {
+    {0x7F,0x49,0x49,0x49,0x41}, /* E */
+    {0x7F,0x09,0x09,0x09,0x01}, /* F */
+    {0x3E,0x41,0x49,0x49,0x7A}, /* G */
+    {0x7F,0x08,0x08,0x08,0x7F}, /* H */
+    {0x00,0x41,0x7F,0x41,0x00}, /* I */
+    {0x7F,0x40,0x40,0x40,0x40}, /* L */
+    {0x3E,0x41,0x41,0x41,0x3E}, /* O */
+    {0x7F,0x09,0x09,0x09,0x06}, /* P */
+    {0x7F,0x09,0x19,0x29,0x46}, /* R */
+    {0x01,0x01,0x7F,0x01,0x01}  /* T */
+};
+
+static uint8_t ascii_glyph_index(char ch)
+{
+    switch (ch) {
+        case 'E': return 0U; case 'F': return 1U; case 'G': return 2U;
+        case 'H': return 3U; case 'I': return 4U; case 'L': return 5U;
+        case 'O': return 6U; case 'P': return 7U; case 'R': return 8U;
+        case 'T': return 9U; default: return 0xFFU;
+    }
+}
+
+static void draw_ascii_label(uint16_t x, uint16_t y, const char *s, uint16_t color)
+{
+    while (*s != '\\0') {
+        uint8_t index = ascii_glyph_index(*s++);
+        uint8_t col, row;
+        if (index == 0xFFU) { x = (uint16_t)(x + 4U); continue; }
+        for (col = 0U; col < 5U; ++col) {
+            for (row = 0U; row < 7U; ++row) {
+                if ((ascii_5x7[index][col] & (1U << row)) != 0U)
+                    lcd_fill_rect((uint16_t)(x + col), (uint16_t)(y + row),
+                                  (uint16_t)(x + col), (uint16_t)(y + row), color);
+            }
+        }
+        x = (uint16_t)(x + 6U);
+    }
+}
+
 static void draw_touch_screen(void)
 {
     uint16_t p;
