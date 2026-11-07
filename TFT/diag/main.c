@@ -75,6 +75,31 @@ static void backlight_init(void)
     __DSB();
 }
 
+/* Active-low P-MOS high-side buzzer switch:
+ * PA8 drives the P-MOS gate through R3. For a conventional P-channel
+ * high-side stage, PA8 LOW turns the buzzer ON; PA8 HIGH turns it OFF.
+ */
+static void buzzer_init(void)
+{
+    RCC->AHB1ENR |= (1UL << 0); /* GPIOA clock */
+    (void)RCC->AHB1ENR;
+    GPIOA->BSRRH = (uint16_t)(1UL << 8U); /* preload low before output */
+    GPIOA->MODER = (GPIOA->MODER & ~(3UL << 16U)) | (1UL << 16U);
+    GPIOA->OTYPER &= ~(1UL << 8U);
+    GPIOA->OSPEEDR = (GPIOA->OSPEEDR & ~(3UL << 16U)) | (1UL << 16U);
+    GPIOA->PUPDR &= ~(3UL << 16U);
+    GPIOA->BSRRL = (uint16_t)(1UL << 8U); /* OFF: P-MOS gate high */
+    __DSB();
+}
+
+static void buzzer_click(void)
+{
+    GPIOA->BSRRH = (uint16_t)(1UL << 8U); /* ON */
+    delay_ms(35U);
+    GPIOA->BSRRL = (uint16_t)(1UL << 8U); /* OFF */
+    __DSB();
+}
+
 static void gpio_af12(GPIO_TypeDef *port, uint32_t pin)
 {
     uint32_t shift = pin * 2U;
@@ -601,6 +626,7 @@ static void run_touch_diagnostic(void)
     volatile uint32_t *m = TOUCH_MAILBOX;
 
     touch_gpio_init();
+    buzzer_init();
     m[0] = TOUCH_MAGIC;
     m[1] = 1U; /* running */
     m[2] = 0U; /* total samples */
@@ -638,8 +664,12 @@ static void run_touch_diagnostic(void)
             record_touch(x, y, z1, z2, pressed);
 
             if (pressed != was_pressed) {
-                if (pressed) ++m[8];
-                else         ++m[9];
+                if (pressed) {
+                    ++m[8];
+                    buzzer_click(); /* short audible confirmation on touch-down */
+                } else {
+                    ++m[9];
+                }
                 was_pressed = pressed;
             }
             __DSB();
