@@ -1,4 +1,4 @@
-name: JZ-TS35 STM32F207 XPT2046 SPI mode-0 polling diagnostic build
+name: JZ-TS35 STM32F207 SDIO 4-bit read-only diagnostic build
 
 on:
   push:
@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          BUILD_DIR=".build/jz-ts35-usart3-tx"
+          BUILD_DIR=".build/jz-ts35-sdio"
           mkdir -p "$BUILD_DIR"
 
           CPU_FLAGS="-mcpu=cortex-m3 -mthumb -mfloat-abi=soft"
@@ -54,12 +54,12 @@ jobs:
           arm-none-eabi-gcc $CPU_FLAGS -nostdlib \
             -Wl,--gc-sections \
             -Wl,--build-id=none \
-            -Wl,-Map="$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.map" \
+            -Wl,-Map="$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.map" \
             -T buildroot/ldscripts/jz_ts35_v2_1_diag.ld \
             "$BUILD_DIR/startup.o" \
             "$BUILD_DIR/diag_main.o" \
             -Wl,--start-group -lgcc -Wl,--end-group \
-            -o "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf"
+            -o "$BUILD_DIR/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.elf"
 
           arm-none-eabi-objcopy -O ihex \
             "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.elf" "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.hex"
@@ -78,7 +78,7 @@ jobs:
           echo "=== ELF sections ==="
           cat "$BUILD_DIR/JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC.sections.txt"
 
-      - name: Upload STM32F207 XPT2046 touch diagnostic firmware and debug symbols
+      - name: Upload STM32F207 SDIO read-only diagnostic firmware and debug symbols
         uses: actions/upload-artifact@v4
         with:
           name: JZ-TS35-STM32F207-TOUCH-DIAGNOSTIC
