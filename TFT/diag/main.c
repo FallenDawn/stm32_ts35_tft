@@ -778,6 +778,7 @@ static void run_touch_diagnostic(void)
 
 
 /* ================= SDIO 4-bit read-only diagnostic =================
+ * Build revision: artifact path corrected.
  * User-confirmed socket wiring:
  * PC8 DAT0, PC9 DAT1, PC10 DAT2, PC11 DAT3, PC12 CLK, PD2 CMD.
  * STM32F207 SDIO uses PLLQ=48 MHz. Configure HSI->PLL 96 MHz,
