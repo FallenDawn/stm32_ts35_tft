@@ -94,9 +94,17 @@ static void buzzer_init(void)
 
 static void buzzer_click(void)
 {
-    GPIOA->BSRRH = (uint16_t)(1UL << 8U); /* ON */
-    delay_ms(35U);
-    GPIOA->BSRRL = (uint16_t)(1UL << 8U); /* OFF */
+    /* Three longer confirmation pulses make the click easier to notice.
+     * This increases audible duration/prominence, not the transducer's
+     * physical maximum sound-pressure level.
+     */
+    uint8_t n;
+    for (n = 0U; n < 3U; ++n) {
+        GPIOA->BSRRH = (uint16_t)(1UL << 8U); /* ON */
+        delay_ms(75U);
+        GPIOA->BSRRL = (uint16_t)(1UL << 8U); /* OFF */
+        if (n < 2U) delay_ms(35U);
+    }
     __DSB();
 }
 
@@ -609,6 +617,11 @@ static void draw_touch_screen(void)
     draw_direction_glyph(12U, 152U, 2U, 0xFFFFU);   /* 左 */
     draw_direction_glyph(452U, 152U, 3U, 0xFFFFU);  /* 右 */
 
+    /* English labels requested for the main touch directions. */
+    draw_ascii_label(224U, 52U, "TOP", 0xFFFFU);
+    draw_ascii_label(18U, 178U, "LEFT", 0xFFFFU);
+    draw_ascii_label(410U, 178U, "RIGHT", 0xFFFFU);
+
     /* Corner witnesses. */
     draw_target(14U, 14U, 0xFFFFU);
     draw_target(465U, 14U, 0xFFFFU);
@@ -643,6 +656,9 @@ static void run_touch_diagnostic(void)
     uint16_t x, y, z1, z2;
     uint8_t was_pressed = 0U, pressed;
     uint32_t last_sample = 0U;
+    uint32_t dot_started_ms = 0U;
+    uint8_t dot_visible = 0U;
+    uint16_t dot_x = 0U, dot_y = 0U;
     volatile uint32_t *m = TOUCH_MAILBOX;
 
     touch_gpio_init();
@@ -683,21 +699,37 @@ static void run_touch_diagnostic(void)
             m[17] = (GPIOB->IDR >> 8U) & 1U; /* PB8/CS level */
             record_touch(x, y, z1, z2, pressed);
 
-            if (pressed != was_pressed) {
-                if (pressed) {
-                    ++m[8];
-                    buzzer_click(); /* short audible confirmation on touch-down */
-                } else {
-                    ++m[9];
-                }
-                was_pressed = pressed;
+            if (pressed && !was_pressed) {
+                ++m[8];
+                buzzer_click();
+
+                /* Provisional raw-ADC-to-screen dot for diagnosis only.
+                 * No axis swap/inversion is applied until the recorded samples
+                 * establish the correct touch transform.
+                 */
+                dot_x = (uint16_t)(((uint32_t)x * 479UL) / 4095UL);
+                dot_y = (uint16_t)(((uint32_t)y * 319UL) / 4095UL);
+                if (dot_x < 5U) dot_x = 5U;
+                if (dot_x > 474U) dot_x = 474U;
+                if (dot_y < 5U) dot_y = 5U;
+                if (dot_y > 314U) dot_y = 314U;
+                lcd_fill_rect((uint16_t)(dot_x - 5U), (uint16_t)(dot_y - 5U),
+                              (uint16_t)(dot_x + 5U), (uint16_t)(dot_y + 5U),
+                              0xFFE0U);
+                dot_started_ms = g_ms;
+                dot_visible = 1U;
+            } else if (!pressed && was_pressed) {
+                ++m[9];
             }
+            was_pressed = pressed;
             __DSB();
 
-            /* Deliberately do not draw touch points or trails.
-             * Keep the display static so the four direction targets remain clear.
-             * Raw X/Y/Z/PENIRQ samples are still recorded in SRAM for SWD diagnosis.
-             */
+            /* One marker per tap; redraw the clean test pattern after 10 s.
+             * This avoids leaving touch trails while making each tap visible. */
+            if (dot_visible && (uint32_t)(g_ms - dot_started_ms) >= 10000UL) {
+                draw_touch_screen();
+                dot_visible = 0U;
+            }
         }
         __WFI();
     }
