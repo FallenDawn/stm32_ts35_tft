@@ -749,7 +749,7 @@ static void run_touch_diagnostic(void)
                  * Confirm all four corners before final endpoint calibration.
                  */
                 dot_x = (uint16_t)(((4095UL - (uint32_t)x) * 479UL) / 4095UL);
-                dot_y = (uint16_t)(((4095UL - (uint32_t)y) * 319UL) / 4095UL);
+                dot_y = (uint16_t)(((uint32_t)y * 319UL) / 4095UL);
                 if (dot_x < 5U) dot_x = 5U;
                 if (dot_x > 474U) dot_x = 474U;
                 if (dot_y < 5U) dot_y = 5U;
