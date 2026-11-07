@@ -776,6 +776,227 @@ static void run_touch_diagnostic(void)
     }
 }
 
+
+/* ================= SDIO 4-bit read-only diagnostic =================
+ * User-confirmed socket wiring:
+ * PC8 DAT0, PC9 DAT1, PC10 DAT2, PC11 DAT3, PC12 CLK, PD2 CMD.
+ * STM32F207 SDIO uses PLLQ=48 MHz. Configure HSI->PLL 96 MHz,
+ * PLLQ=48 MHz, SDIO init clock <=400 kHz, then transfer clock 12 MHz.
+ * Results: mailbox 0x2001F000; sector-0 buffer 0x20010000 (512 bytes).
+ */
+#define SDIO_BASE_ADDR 0x40012C00UL
+#define SDIO_REG(off) (*(volatile uint32_t *)(SDIO_BASE_ADDR + (off)))
+#define SDIO_POWER   SDIO_REG(0x00U)
+#define SDIO_CLKCR   SDIO_REG(0x04U)
+#define SDIO_ARG     SDIO_REG(0x08U)
+#define SDIO_CMD     SDIO_REG(0x0CU)
+#define SDIO_RESPCMD SDIO_REG(0x10U)
+#define SDIO_RESP1   SDIO_REG(0x14U)
+#define SDIO_RESP2   SDIO_REG(0x18U)
+#define SDIO_RESP3   SDIO_REG(0x1CU)
+#define SDIO_RESP4   SDIO_REG(0x20U)
+#define SDIO_DTIMER  SDIO_REG(0x24U)
+#define SDIO_DLEN    SDIO_REG(0x28U)
+#define SDIO_DCTRL   SDIO_REG(0x2CU)
+#define SDIO_DCOUNT  SDIO_REG(0x30U)
+#define SDIO_STA     SDIO_REG(0x34U)
+#define SDIO_ICR     SDIO_REG(0x38U)
+#define SDIO_MASK    SDIO_REG(0x3CU)
+#define SDIO_FIFO    SDIO_REG(0x80U)
+#define SDIO_STATIC_FLAGS 0x00C007FFUL
+#define SDIO_CMD_CCRCFAIL (1UL<<0)
+#define SDIO_CMD_DTIMEOUT (1UL<<3)
+#define SDIO_CMD_CTIMEOUT (1UL<<2)
+#define SDIO_CMD_TXUNDERR (1UL<<4)
+#define SDIO_CMD_RXOVERR  (1UL<<5)
+#define SDIO_CMD_CMDREND  (1UL<<6)
+#define SDIO_CMD_CMDSENT  (1UL<<7)
+#define SDIO_DATA_DCRCFAIL (1UL<<1)
+#define SDIO_DATA_DTIMEOUT (1UL<<3)
+#define SDIO_DATA_DATAEND (1UL<<8)
+#define SDIO_DATA_RXDAVL (1UL<<21)
+#define SDIO_DATA_RXFIFOHF (1UL<<15)
+#define SDIO_DATA_STBITERR (1UL<<9)
+#define SDIO_MAILBOX ((volatile uint32_t *)0x2001F000UL)
+#define SDIO_SECTOR0 ((volatile uint32_t *)0x20010000UL)
+
+static void clock_init_96mhz(void)
+{
+    /* HSI 16 MHz -> PLL VCO 192 MHz, SYSCLK 96 MHz, PLLQ 48 MHz. */
+    RCC->CR |= (1UL<<16); /* HSE is not required; HSI feeds PLL. */
+    RCC->PLLCFGR = 16UL | (192UL<<6) | (0UL<<16) | (4UL<<24);
+    RCC->CR |= (1UL<<24);
+    while ((RCC->CR & (1UL<<25)) == 0U) {}
+    FLASH->ACR = (1UL<<10) | (1UL<<9) | (1UL<<8) | 3UL;
+    RCC->CFGR = (RCC->CFGR & ~((15UL<<4)|(7UL<<10)|(7UL<<13)|3UL)) |
+                (4UL<<10) | (2UL);
+    while ((RCC->CFGR & (3UL<<2)) != (2UL<<2)) {}
+    SystemCoreClock = 96000000UL;
+    SysTick->CTRL = 0U;
+    SysTick->LOAD = 95999UL;
+    SysTick->VAL = 0U;
+    SysTick->CTRL = 7UL;
+}
+
+static void sdio_gpio_init(void)
+{
+    RCC->AHB1ENR |= (1UL<<2) | (1UL<<3); /* GPIOC, GPIOD */
+    RCC->APB2ENR |= (1UL<<11);           /* SDIO clock */
+    (void)RCC->APB2ENR;
+    /* PC8..PC12 AF12. CMD/DAT lines have pull-ups; CLK no pull. */
+    gpio_af12(GPIOC,8); gpio_af12(GPIOC,9); gpio_af12(GPIOC,10);
+    gpio_af12(GPIOC,11); gpio_af12(GPIOC,12);
+    gpio_af12(GPIOD,2);
+    GPIOC->PUPDR = (GPIOC->PUPDR & ~((3UL<<16)|(3UL<<18)|(3UL<<20)|(3UL<<22)|(3UL<<24))) |
+                   (1UL<<16)|(1UL<<18)|(1UL<<20)|(1UL<<22);
+    GPIOD->PUPDR = (GPIOD->PUPDR & ~(3UL<<4)) | (1UL<<4);
+    SDIO_POWER = 0U;
+    SDIO_CLKCR = 0U;
+    SDIO_MASK = 0U;
+    SDIO_ICR = SDIO_STATIC_FLAGS;
+    SDIO_POWER = 3U;
+    delay_ms(2U);
+    /* 48 MHz / (CLKDIV+2), divider 118 => 400 kHz. */
+    SDIO_CLKCR = 118U | (1UL<<8); /* clock enable, 1-bit bus initially */
+    delay_ms(2U);
+}
+
+static uint32_t sdio_command(uint8_t index, uint32_t argument, uint32_t response)
+{
+    uint32_t timeout = 2000000UL;
+    uint32_t sta;
+    SDIO_ICR = SDIO_STATIC_FLAGS;
+    SDIO_ARG = argument;
+    SDIO_CMD = (uint32_t)index | response | (1UL<<10); /* CPSMEN */
+    while (timeout-- != 0U) {
+        sta = SDIO_STA;
+        if (sta & (SDIO_CMD_CTIMEOUT|SDIO_CMD_CCRCFAIL|SDIO_CMD_CMDREND|SDIO_CMD_CMDSENT))
+            break;
+    }
+    sta = SDIO_STA;
+    SDIO_MAILBOX[10] = sta;
+    if (sta & SDIO_CMD_CTIMEOUT) return 1U;
+    if ((sta & SDIO_CMD_CCRCFAIL) && response != 0U) return 2U;
+    if (response != 0U && !(sta & (SDIO_CMD_CMDREND|SDIO_CMD_CCRCFAIL))) return 3U;
+    if (response == 0U && !(sta & SDIO_CMD_CMDSENT)) return 4U;
+    return 0U;
+}
+
+static uint32_t sdio_app_command(uint16_t rca, uint8_t index, uint32_t arg)
+{
+    uint32_t e = sdio_command(55U, (uint32_t)rca<<16, 1UL<<6);
+    if (e != 0U) return 0x100U | e;
+    return sdio_command(index,arg,1UL<<6);
+}
+
+static uint32_t sdio_read_block0(void)
+{
+    uint32_t i, timeout, sta;
+    SDIO_ICR = SDIO_STATIC_FLAGS;
+    SDIO_DTIMER = 0xFFFFFFFFUL;
+    SDIO_DLEN = 512U;
+    SDIO_DCTRL = (9UL<<4) | (1UL<<1) | 1UL; /* 512-byte, block, read, enable */
+    if (sdio_command(17U,0U,1UL<<6) != 0U) return 0x201U;
+    timeout = 10000000UL;
+    i = 0U;
+    while (i < 128U && timeout-- != 0U) {
+        sta = SDIO_STA;
+        if (sta & (SDIO_DATA_DCRCFAIL|SDIO_DATA_DTIMEOUT|SDIO_DATA_STBITERR|SDIO_CMD_RXOVERR))
+            return 0x202U | ((sta & 0xFFU)<<16);
+        if (sta & SDIO_DATA_RXDAVL) {
+            SDIO_SECTOR0[i++] = SDIO_FIFO;
+        }
+    }
+    if (i != 128U) return 0x203U;
+    timeout = 10000000UL;
+    while (timeout-- != 0U) {
+        sta = SDIO_STA;
+        if (sta & (SDIO_DATA_DCRCFAIL|SDIO_DATA_DTIMEOUT|SDIO_DATA_STBITERR))
+            return 0x204U | ((sta & 0xFFU)<<16);
+        if (sta & SDIO_DATA_DATAEND) break;
+    }
+    if ((SDIO_STA & SDIO_DATA_DATAEND) == 0U) return 0x205U;
+    SDIO_DCTRL = 0U;
+    return 0U;
+}
+
+static void run_sdio_diagnostic(void)
+{
+    volatile uint32_t *m = SDIO_MAILBOX;
+    uint32_t err, i, ocr, rca;
+    m[0]=0x5344494FUL; /* SDIO */
+    for(i=1U;i<32U;i++) m[i]=0U;
+    m[1]=1U; /* running */
+    __DSB();
+
+    clock_init_96mhz();
+    sdio_gpio_init();
+
+    err=sdio_command(0U,0U,0U); /* CMD0 */
+    m[2]=err;
+    if(err) goto fail;
+    err=sdio_command(8U,0x1AAU,1UL<<6); /* CMD8 */
+    m[3]=err; m[4]=SDIO_RESP1;
+    /* CMD8 timeout is normal for legacy SDSC cards. */
+    if(err!=0U && err!=1U) goto fail;
+
+    ocr=0U;
+    for(i=0U;i<1000U;i++) {
+        err=sdio_app_command(0U,41U,0x40FF8000UL);
+        if(err!=0U) { m[5]=err; goto fail; }
+        ocr=SDIO_RESP1;
+        if(ocr & (1UL<<31)) break;
+        delay_ms(1U);
+    }
+    m[6]=ocr;
+    if((ocr & (1UL<<31))==0U) { err=0x301U; goto fail; }
+
+    err=sdio_command(2U,0U,1UL<<6); /* CMD2, CID */
+    if(err) goto fail;
+    m[7]=SDIO_RESP1; m[8]=SDIO_RESP2; m[9]=SDIO_RESP3; m[11]=SDIO_RESP4;
+
+    err=sdio_command(3U,0U,1UL<<6); /* CMD3, RCA */
+    if(err) goto fail;
+    rca=SDIO_RESP1>>16;
+    m[12]=rca;
+    err=sdio_command(9U,rca<<16,1UL<<6); /* CMD9, CSD */
+    if(err) goto fail;
+    m[13]=SDIO_RESP1; m[14]=SDIO_RESP2; m[15]=SDIO_RESP3; m[16]=SDIO_RESP4;
+
+    err=sdio_command(7U,rca<<16,1UL<<6); /* CMD7 select */
+    if(err) goto fail;
+    err=sdio_app_command((uint16_t)rca,6U,2U); /* ACMD6, 4-bit */
+    if(err) goto fail;
+    SDIO_CLKCR = (SDIO_CLKCR & ~(3UL<<11)) | (1UL<<11) | 2U | (1UL<<8);
+    /* Transfer clock 12 MHz from 48 MHz PLLQ, 4-bit bus. */
+    err=sdio_read_block0();
+    m[17]=err;
+    if(err) goto fail;
+
+    m[18]=SDIO_DCOUNT;
+    m[19]=SDIO_SECTOR0[0];
+    m[20]=SDIO_SECTOR0[1];
+    m[21]=SDIO_SECTOR0[2];
+    m[22]=SDIO_SECTOR0[3];
+    m[23]=SDIO_SECTOR0[127];
+    m[24]=0U;
+    for(i=0U;i<128U;i++) m[24]^=SDIO_SECTOR0[i];
+    m[1]=2U; /* PASS */
+    m[25]=0x50415353UL;
+    __DSB();
+    for(;;) __WFI();
+
+fail:
+    m[1]=3U; /* FAIL */
+    m[26]=err;
+    m[27]=SDIO_STA;
+    m[28]=SDIO_CLKCR;
+    m[29]=SDIO_POWER;
+    __DSB();
+    for(;;) __WFI();
+}
+
+
 int main(void)
 {
     g_stage2d_status = ST_BOOT;
@@ -791,5 +1012,5 @@ int main(void)
     g_stage2d_status = ST_RESET_DONE;
     lcd_init();
     g_stage2d_status = ST_LCD_INIT;
-    run_touch_diagnostic();
+    run_sdio_diagnostic();
 }
