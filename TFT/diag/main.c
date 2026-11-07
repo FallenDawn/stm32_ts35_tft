@@ -821,21 +821,17 @@ static void run_touch_diagnostic(void)
 #define SDIO_MAILBOX ((volatile uint32_t *)0x2001F000UL)
 #define SDIO_SECTOR0 ((volatile uint32_t *)0x20010000UL)
 
-static void clock_init_96mhz(void)
+static void sdio_pll_init_48mhz(void)
 {
-    /* HSI 16 MHz -> PLL VCO 192 MHz, SYSCLK 96 MHz, PLLQ 48 MHz. */
-    /* Keep HSE disabled; HSI feeds PLL. */
-    RCC->PLLCFGR = 16UL | (192UL<<6) | (0UL<<16) | (4UL<<24);
-    RCC->CR |= (1UL<<24);
-    while ((RCC->CR & (1UL<<25)) == 0U) {}
-    FLASH->ACR = (1UL<<10) | (1UL<<9) | (1UL<<8) | 3UL;
-    RCC->CFGR = (RCC->CFGR & ~((15UL<<4)|(7UL<<10)|(7UL<<13)|3UL)) |
-                (4UL<<10) | (2UL);
-    while ((RCC->CFGR & (3UL<<2)) != (2UL<<2)) {}
-    SysTick->CTRL = 0U;
-    SysTick->LOAD = 95999UL;
-    SysTick->VAL = 0U;
-    SysTick->CTRL = 7UL;
+    /*
+     * Keep SYSCLK on the reset-default 16 MHz HSI.
+     * Only start the main PLL so PLLQ supplies the SDIO 48 MHz clock.
+     * Do NOT switch SYSCLK: FSMC timings and SysTick were configured for
+     * 16 MHz, and changing HCLK here corrupts subsequent LCD transactions.
+     */
+    RCC->PLLCFGR = 16UL | (192UL << 6) | (0UL << 16) | (4UL << 24);
+    RCC->CR |= (1UL << 24); /* PLLON */
+    while ((RCC->CR & (1UL << 25)) == 0U) { /* PLLRDY */ }
 }
 
 static void sdio_gpio_init(void)
@@ -950,7 +946,7 @@ static void run_sdio_diagnostic(void)
     __DSB();
     sdio_draw_start_screen();
 
-    clock_init_96mhz();
+    sdio_pll_init_48mhz();
     sdio_gpio_init();
 
     err=sdio_command(0U,0U,0U); /* CMD0 */
