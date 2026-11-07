@@ -387,59 +387,77 @@ static void w25q32_dump_service(void)
     }
 }
 
+
+static void lcd_fill_rect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color)
+{
+    uint32_t i, count;
+    if (x1 >= 320U) x1 = 319U;
+    if (y1 >= 480U) y1 = 479U;
+    LCD_CMD(0x2A);
+    LCD_DATA(0U); LCD_DATA(x0); LCD_DATA(0U); LCD_DATA(x1);
+    LCD_CMD(0x2B);
+    LCD_DATA(0U); LCD_DATA(y0); LCD_DATA(0U); LCD_DATA(y1);
+    LCD_CMD(0x2C);
+    count = ((uint32_t)x1 - x0 + 1U) * ((uint32_t)y1 - y0 + 1U);
+    for (i = 0U; i < count; ++i) LCD_DATA(color);
+}
+static void draw_hline(uint16_t x, uint16_t y, uint16_t w, uint16_t color)
+{
+    if (w) lcd_fill_rect(x, y, (uint16_t)(x + w - 1U), y, color);
+}
+static void draw_static_hud(void)
+{
+    uint16_t y;
+    lcd_fill(0x0841);
+    lcd_fill_rect(5U,5U,314U,474U,0x18E3);
+    lcd_fill_rect(7U,7U,312U,472U,0x0841);
+    lcd_fill_rect(14U,16U,305U,62U,0x10A3);
+    lcd_fill_rect(14U,70U,305U,420U,0x0000);
+    lcd_fill_rect(14U,428U,305U,463U,0x10A3);
+    lcd_fill_rect(20U,22U,25U,56U,0x07FF);
+    draw_hline(35U,28U,245U,0x7DFF);
+    draw_hline(35U,36U,190U,0x39E7);
+    draw_hline(35U,44U,220U,0x39E7);
+    draw_hline(35U,52U,150U,0x39E7);
+    for (y=90U; y<410U; y=(uint16_t)(y+32U)) draw_hline(22U,y,276U,0x10A3);
+    for (y=40U; y<300U; y=(uint16_t)(y+40U)) lcd_fill_rect(y,82U,y,401U,0x0862);
+    lcd_fill_rect(22U,438U,92U,443U,0x39E7);
+    lcd_fill_rect(22U,450U,285U,453U,0x2104);
+    lcd_fill_rect(22U,450U,105U,453U,0x07E0);
+    lcd_fill_rect(22U,458U,285U,459U,0x39E7);
+}
+static void run_screen_animation(void)
+{
+    uint16_t frame=0U, old_y=92U, old_x=24U, y, x, bar;
+    draw_static_hud();
+    for (;;) {
+        lcd_fill_rect(22U,old_y,298U,(uint16_t)(old_y+3U),0x0000);
+        lcd_fill_rect(old_x,180U,(uint16_t)(old_x+27U),196U,0x0000);
+        y=(uint16_t)(92U+((frame*5U)%300U));
+        x=(uint16_t)(24U+((frame*7U)%245U));
+        bar=(uint16_t)(20U+((frame*3U)%250U));
+        draw_hline(22U,y,276U,0x03EF);
+        draw_hline(22U,(uint16_t)(y+1U),276U,0x01A8);
+        lcd_fill_rect(x,180U,(uint16_t)(x+27U),196U,0x07FF);
+        lcd_fill_rect((uint16_t)(x+5U),184U,(uint16_t)(x+22U),192U,0xFFFF);
+        lcd_fill_rect(22U,450U,285U,453U,0x2104);
+        lcd_fill_rect(22U,450U,(uint16_t)(22U+bar),453U,0x07E0);
+        old_y=y; old_x=x; ++frame;
+        delay_ms(35U);
+    }
+}
 int main(void)
 {
-    g_stage2d_status = ST_BOOT;
-    backlight_init(); /* Turn on backlight before touching the LCD bus. */
-
-    if (SysTick_Config(HSI_VALUE / 1000UL) != 0UL) {
-        for (;;) __NOP();
-    }
-
+    g_stage2d_status=ST_BOOT;
+    backlight_init();
+    if (SysTick_Config(HSI_VALUE/1000UL)!=0UL) for (;;) __NOP();
     lcd_reset_gpio_init();
     fsmc_gpio_init();
     fsmc_init();
-    g_stage2d_status = ST_FSMC_READY;
-
+    g_stage2d_status=ST_FSMC_READY;
     lcd_hardware_reset();
-    g_stage2d_status = ST_RESET_DONE;
-
+    g_stage2d_status=ST_RESET_DONE;
     lcd_init();
-    g_stage2d_status = ST_LCD_INIT;
-
-    /* Red -> green -> blue -> black, one second per screen. */
-    lcd_fill(0xF800);
-    delay_ms(1000U);
-    lcd_fill(0x07E0);
-    delay_ms(1000U);
-    lcd_fill(0x001F);
-    delay_ms(1000U);
-    lcd_fill(0x0000);
-
-    g_stage2d_status = ST_FILL_DONE;
-
-    /*
-     * ST-LINK-only W25Q32 full dump. JEDEC ID is validated first.
-     * The flash is accessed with READ (0x03) only; no erase/program command.
-     */
-    w25q32_gpio_init();
-    {
-        uint8_t id[3];
-        volatile uint32_t *m = W25Q_DUMP_MAILBOX;
-        w25q32_read_jedec_id(id);
-        m[0] = 0x57323551UL; /* 'W25Q' */
-        m[1] = 0U;           /* host command */
-        m[2] = 0U;           /* requested flash offset */
-        m[3] = 0U;           /* requested length */
-        m[4] = (id[0] == 0xEFU && id[1] == 0x40U && id[2] == 0x16U) ? 0U : 4U;
-        m[5] = 0U;
-        m[6] = ((uint32_t)id[0] << 16U) | ((uint32_t)id[1] << 8U) | id[2];
-        m[7] = 0xA55A5AA5UL;
-        __DSB();
-    }
-
-    for (;;) {
-        w25q32_dump_service();
-        __NOP();
-    }
+    g_stage2d_status=ST_LCD_INIT;
+    run_screen_animation();
 }
