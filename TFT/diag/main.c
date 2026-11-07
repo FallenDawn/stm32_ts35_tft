@@ -44,8 +44,36 @@ enum {
     ST_FILL_DONE  = 0x444F4E45UL
 };
 
+/*
+ * Reset-cause history lives outside the normal mailbox fields and outside
+ * the C runtime's .bss/.data initialization. SystemInit runs before those
+ * sections are initialized, so RCC_CSR is captured before application code.
+ *
+ * 0x2001F050: signature
+ * 0x2001F054: boot counter (retained across non-power resets)
+ * 0x2001F058: RCC_CSR snapshot from the reset that just occurred
+ * 0x2001F05C: complement of the snapshot (quick integrity check)
+ */
+#define RESET_DIAG ((volatile uint32_t *)0x2001F050UL)
+#define RESET_DIAG_MAGIC 0x52535421UL
+
 void SystemInit(void)
 {
+    uint32_t reset_flags = RCC->CSR;
+
+    if (RESET_DIAG[0] != RESET_DIAG_MAGIC) {
+        RESET_DIAG[0] = RESET_DIAG_MAGIC;
+        RESET_DIAG[1] = 0U;
+    }
+    RESET_DIAG[1] = RESET_DIAG[1] + 1U;
+    RESET_DIAG[2] = reset_flags;
+    RESET_DIAG[3] = ~reset_flags;
+    __DSB();
+
+    /* Clear sticky reset flags only after preserving the snapshot in SRAM. */
+    RCC->CSR |= (1UL << 24); /* RMVF */
+    __DSB();
+
     SCB->VTOR = 0x08000000UL;
     __DSB();
     __ISB();
