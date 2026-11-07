@@ -744,12 +744,12 @@ static void run_touch_diagnostic(void)
                 ++m[8];
                 buzzer_click();
 
-                /* Test 180-degree touch orientation: both raw axes are
-                 * inverted relative to the landscape LCD. Do not swap axes.
-                 * Confirm all four corners before final endpoint calibration.
+                /* Map the XPT2046 panel axes onto landscape LCD coordinates.
+                 * The observed bottom-corner taps show the raw axes are swapped:
+                 * LCD X follows inverted raw Y; LCD Y follows raw X.
                  */
-                dot_x = (uint16_t)(((4095UL - (uint32_t)x) * 479UL) / 4095UL);
-                dot_y = (uint16_t)(((4095UL - (uint32_t)y) * 319UL) / 4095UL);
+                dot_x = (uint16_t)(((4095UL - (uint32_t)y) * 479UL) / 4095UL);
+                dot_y = (uint16_t)(((uint32_t)x * 319UL) / 4095UL);
                 if (dot_x < 5U) dot_x = 5U;
                 if (dot_x > 474U) dot_x = 474U;
                 if (dot_y < 5U) dot_y = 5U;
