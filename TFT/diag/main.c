@@ -94,17 +94,12 @@ static void buzzer_init(void)
 
 static void buzzer_click(void)
 {
-    /* Three longer confirmation pulses make the click easier to notice.
-     * This increases audible duration/prominence, not the transducer's
-     * physical maximum sound-pressure level.
+    /* Hold the active buzzer on longer for a more prominent confirmation.
+     * Firmware cannot raise its supply voltage or physical sound-pressure level.
      */
-    uint8_t n;
-    for (n = 0U; n < 3U; ++n) {
-        GPIOA->BSRRH = (uint16_t)(1UL << 8U); /* ON */
-        delay_ms(75U);
-        GPIOA->BSRRL = (uint16_t)(1UL << 8U); /* OFF */
-        if (n < 2U) delay_ms(35U);
-    }
+    GPIOA->BSRRH = (uint16_t)(1UL << 8U); /* ON */
+    delay_ms(250U);
+    GPIOA->BSRRL = (uint16_t)(1UL << 8U); /* OFF */
     __DSB();
 }
 
@@ -559,14 +554,16 @@ static const uint16_t direction_glyphs[4][16] = {
 static void draw_direction_glyph(uint16_t x, uint16_t y, uint8_t glyph,
                                  uint16_t color)
 {
-    uint16_t row;
-    uint16_t col;
+    uint16_t row, col;
+    const uint16_t scale = 2U;
     if (glyph > 3U) return;
     for (row = 0U; row < 16U; ++row) {
         for (col = 0U; col < 16U; ++col) {
             if ((direction_glyphs[glyph][row] & (0x8000U >> col)) != 0U)
-                lcd_fill_rect((uint16_t)(x + col), (uint16_t)(y + row),
-                              (uint16_t)(x + col), (uint16_t)(y + row), color);
+                lcd_fill_rect((uint16_t)(x + col * scale),
+                              (uint16_t)(y + row * scale),
+                              (uint16_t)(x + col * scale + scale - 1U),
+                              (uint16_t)(y + row * scale + scale - 1U), color);
         }
     }
 }
@@ -605,18 +602,21 @@ static uint8_t ascii_glyph_index(char ch)
 
 static void draw_ascii_label(uint16_t x, uint16_t y, const char *s, uint16_t color)
 {
-    while (*s != '\\0') {
+    const uint16_t scale = 3U;
+    while (*s != '\0') {
         uint8_t index = ascii_glyph_index(*s++);
         uint8_t col, row;
-        if (index == 0xFFU) { x = (uint16_t)(x + 4U); continue; }
+        if (index == 0xFFU) { x = (uint16_t)(x + 4U * scale); continue; }
         for (col = 0U; col < 5U; ++col) {
             for (row = 0U; row < 7U; ++row) {
                 if ((ascii_5x7[index][col] & (1U << row)) != 0U)
-                    lcd_fill_rect((uint16_t)(x + col), (uint16_t)(y + row),
-                                  (uint16_t)(x + col), (uint16_t)(y + row), color);
+                    lcd_fill_rect((uint16_t)(x + col * scale),
+                                  (uint16_t)(y + row * scale),
+                                  (uint16_t)(x + col * scale + scale - 1U),
+                                  (uint16_t)(y + row * scale + scale - 1U), color);
             }
         }
-        x = (uint16_t)(x + 6U);
+        x = (uint16_t)(x + 6U * scale);
     }
 }
 
@@ -653,15 +653,15 @@ static void draw_touch_screen(void)
     draw_target(437U, 160U, 0x07FFU);  /* RIGHT */
     draw_target(240U, 160U, 0xFFE0U);  /* CENTER */
 
-    draw_direction_glyph(232U, 12U, 0U, 0xFFFFU);   /* 上 */
-    draw_direction_glyph(232U, 300U, 1U, 0xFFFFU);  /* 下 */
-    draw_direction_glyph(12U, 152U, 2U, 0xFFFFU);   /* 左 */
-    draw_direction_glyph(452U, 152U, 3U, 0xFFFFU);  /* 右 */
+    draw_direction_glyph(224U, 8U, 0U, 0xFFFFU);    /* 上, 32x32 */
+    draw_direction_glyph(224U, 280U, 1U, 0xFFFFU);  /* 下, 32x32 */
+    draw_direction_glyph(8U, 144U, 2U, 0xFFFFU);    /* 左, 32x32 */
+    draw_direction_glyph(440U, 144U, 3U, 0xFFFFU);  /* 右, 32x32 */
 
-    /* English labels requested for the main touch directions. */
-    draw_ascii_label(224U, 52U, "TOP", 0xFFFFU);
-    draw_ascii_label(18U, 178U, "LEFT", 0xFFFFU);
-    draw_ascii_label(410U, 178U, "RIGHT", 0xFFFFU);
+    /* Large, fixed-size English direction labels. */
+    draw_ascii_label(210U, 48U, "TOP", 0xFFFFU);
+    draw_ascii_label(14U, 184U, "LEFT", 0xFFFFU);
+    draw_ascii_label(390U, 184U, "RIGHT", 0xFFFFU);
 
     /* Corner witnesses. */
     draw_target(14U, 14U, 0xFFFFU);
