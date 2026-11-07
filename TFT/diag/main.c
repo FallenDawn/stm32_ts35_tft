@@ -217,7 +217,7 @@ static void lcd_init(void)
     LCD_DATA(0x24); LCD_DATA(0x20); LCD_DATA(0x00);
 
     lcd_write_cmd_data(0x20, 0x00); /* Inversion off */
-    lcd_write_cmd_data(0x36, 0x08); /* Portrait 320x480, BGR; MV=0 */
+    lcd_write_cmd_data(0x36, 0x28); /* Landscape 480x320: MV=1, BGR=1 */
     LCD_CMD(0x29);                 /* Display on */
     delay_ms(150U);
 }
@@ -336,20 +336,23 @@ static void uart_send_hex_byte(uint8_t value)
     USART3->DR = (uint16_t)hex[value & 0x0FU];
 }
 
+static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
+{
+    /* CASET/PASET use four separate 8-bit parameters, each on D[7:0]. */
+    LCD_CMD(0x2A);
+    LCD_DATA((uint8_t)(x0 >> 8)); LCD_DATA((uint8_t)x0);
+    LCD_DATA((uint8_t)(x1 >> 8)); LCD_DATA((uint8_t)x1);
+    LCD_CMD(0x2B);
+    LCD_DATA((uint8_t)(y0 >> 8)); LCD_DATA((uint8_t)y0);
+    LCD_DATA((uint8_t)(y1 >> 8)); LCD_DATA((uint8_t)y1);
+    LCD_CMD(0x2C);
+}
+
 static void lcd_fill(uint16_t color)
 {
     uint32_t i;
-
-    LCD_CMD(0x2A);
-    LCD_DATA(0x0000); LCD_DATA(0x0000);
-    LCD_DATA(0x0001); LCD_DATA(0x003F); /* X: 0..319 */
-
-    LCD_CMD(0x2B);
-    LCD_DATA(0x0000); LCD_DATA(0x0000);
-    LCD_DATA(0x0001); LCD_DATA(0x00DF); /* Y: 0..479 */
-
-    LCD_CMD(0x2C);
-    for (i = 0; i < (320UL * 480UL); ++i) {
+    lcd_set_window(0U, 0U, 479U, 319U);
+    for (i = 0U; i < (480UL * 320UL); ++i) {
         LCD_DATA(color);
         ++g_pixels_written;
     }
@@ -416,13 +419,10 @@ static void w25q32_dump_service(void)
 static void lcd_fill_rect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color)
 {
     uint32_t i, count;
-    if (x1 >= 320U) x1 = 319U;
-    if (y1 >= 480U) y1 = 479U;
-    LCD_CMD(0x2A);
-    LCD_DATA(0U); LCD_DATA(x0); LCD_DATA(0U); LCD_DATA(x1);
-    LCD_CMD(0x2B);
-    LCD_DATA(0U); LCD_DATA(y0); LCD_DATA(0U); LCD_DATA(y1);
-    LCD_CMD(0x2C);
+    if (x1 >= 480U) x1 = 479U;
+    if (y1 >= 320U) y1 = 319U;
+    if (x0 > x1 || y0 > y1) return;
+    lcd_set_window(x0, y0, x1, y1);
     count = ((uint32_t)x1 - x0 + 1U) * ((uint32_t)y1 - y0 + 1U);
     for (i = 0U; i < count; ++i) LCD_DATA(color);
 }
@@ -529,7 +529,7 @@ static uint8_t touch_is_pressed(void)
 
 static void lcd_vline(uint16_t x, uint16_t y, uint16_t h, uint16_t color)
 {
-    if (x < 320U && h != 0U) lcd_fill_rect(x, y, x, (uint16_t)(y+h-1U), color);
+    if (x < 480U && h != 0U) lcd_fill_rect(x, y, x, (uint16_t)(y+h-1U), color);
 }
 
 static void draw_target(uint16_t x, uint16_t y, uint16_t color)
@@ -543,56 +543,53 @@ static void draw_target(uint16_t x, uint16_t y, uint16_t color)
 static void draw_touch_screen(void)
 {
     uint16_t p;
-
-    /*
-     * True edge-to-edge test canvas: every pixel of the 320x480 panel is
-     * available to the coordinate test. No header/footer inset reduces it.
-     * Four cardinal targets sit close to the physical panel edges.
-     */
+    /* ILI9486L native GRAM: 320x480. MADCTL.MV=1 exposes 480x320 landscape. */
     lcd_fill(0x0000U);
 
-    /* One-pixel perimeter and 10-pixel inward edge guides. */
-    lcd_fill_rect(0U, 0U, 319U, 1U, 0xFFFFU);
-    lcd_fill_rect(0U, 478U, 319U, 479U, 0xFFFFU);
-    lcd_fill_rect(0U, 0U, 1U, 479U, 0xFFFFU);
-    lcd_fill_rect(318U, 0U, 319U, 479U, 0xFFFFU);
-    lcd_fill_rect(10U, 10U, 309U, 10U, 0x39E7U);
-    lcd_fill_rect(10U, 469U, 309U, 469U, 0x39E7U);
-    lcd_fill_rect(10U, 10U, 10U, 469U, 0x39E7U);
-    lcd_fill_rect(309U, 10U, 309U, 469U, 0x39E7U);
+    /* Edge-to-edge perimeter, logical x=0..479 and y=0..319. */
+    lcd_fill_rect(0U, 0U, 479U, 1U, 0xFFFFU);
+    lcd_fill_rect(0U, 318U, 479U, 319U, 0xFFFFU);
+    lcd_fill_rect(0U, 0U, 1U, 319U, 0xFFFFU);
+    lcd_fill_rect(478U, 0U, 479U, 319U, 0xFFFFU);
 
-    /* Full-area crosshair/grid, not a reduced central touch window. */
+    /* Inner edge guide. */
+    lcd_fill_rect(10U, 10U, 469U, 10U, 0x39E7U);
+    lcd_fill_rect(10U, 309U, 469U, 309U, 0x39E7U);
+    lcd_fill_rect(10U, 10U, 10U, 309U, 0x39E7U);
+    lcd_fill_rect(469U, 10U, 469U, 309U, 0x39E7U);
+
+    /* Grid covers the entire active area. */
     for (p=40U; p<480U; p=(uint16_t)(p+40U))
-        lcd_fill_rect(2U, p, 317U, (uint16_t)(p+1U), 0x1082U);
+        lcd_fill_rect(p, 2U, (uint16_t)(p+1U), 317U, 0x1082U);
     for (p=40U; p<320U; p=(uint16_t)(p+40U))
-        lcd_fill_rect(p, 2U, (uint16_t)(p+1U), 477U, 0x1082U);
-    lcd_fill_rect(159U, 2U, 160U, 477U, 0x2104U);
-    lcd_fill_rect(2U, 238U, 317U, 239U, 0x2104U);
+        lcd_fill_rect(2U, p, 477U, (uint16_t)(p+1U), 0x1082U);
+    lcd_fill_rect(239U, 2U, 240U, 317U, 0x2104U);
+    lcd_fill_rect(2U, 159U, 477U, 160U, 0x2104U);
 
-    /* Cardinal edge targets: TOP, BOTTOM, LEFT, RIGHT; center is yellow. */
-    draw_target(160U, 14U, 0xF800U);  /* TOP */
-    draw_target(160U, 465U, 0x001FU); /* BOTTOM */
-    draw_target(14U, 238U, 0x07E0U);  /* LEFT */
-    draw_target(305U, 238U, 0x07FFU); /* RIGHT */
-    draw_target(160U, 238U, 0xFFE0U); /* CENTER */
+    /* Four cardinal targets and center. */
+    draw_target(240U, 14U, 0xF800U);  /* TOP red */
+    draw_target(240U, 305U, 0x001FU); /* BOTTOM blue */
+    draw_target(14U, 160U, 0x07E0U);  /* LEFT green */
+    draw_target(465U, 160U, 0x07FFU); /* RIGHT cyan */
+    draw_target(240U, 160U, 0xFFE0U); /* CENTER yellow */
 
-    /* Corner witness marks make edge clipping / rotation obvious. */
+    /* Corner witnesses. */
     draw_target(14U, 14U, 0xFFFFU);
-    draw_target(305U, 14U, 0xFFFFU);
-    draw_target(14U, 465U, 0xFFFFU);
-    draw_target(305U, 465U, 0xFFFFU);
+    draw_target(465U, 14U, 0xFFFFU);
+    draw_target(14U, 305U, 0xFFFFU);
+    draw_target(465U, 305U, 0xFFFFU);
 }
 
 static uint16_t raw_to_x(uint16_t raw)
 {
     if (raw > 4095U) raw = 4095U;
-    return (uint16_t)(((uint32_t)raw * 319U) / 4095U);
+    return (uint16_t)(((uint32_t)raw * 479U) / 4095U);
 }
 
 static uint16_t raw_to_y(uint16_t raw)
 {
     if (raw > 4095U) raw = 4095U;
-    return (uint16_t)(((uint32_t)raw * 479U) / 4095U);
+    return (uint16_t)(((uint32_t)raw * 319U) / 4095U);
 }
 
 static void record_touch(uint16_t x, uint16_t y, uint16_t z1, uint16_t z2,
@@ -634,9 +631,9 @@ static void run_touch_diagnostic(void)
     m[4] = 0U; m[5] = 0U; m[6] = 0U; m[7] = 0U;
     m[8] = 0U; /* press transitions */
     m[9] = 0U; /* release transitions */
-    m[10] = 0x08U; /* MADCTL */
-    m[11] = 320U;
-    m[12] = 480U;
+    m[10] = 0x28U; /* MADCTL: landscape MV+BGR */
+    m[11] = 480U;
+    m[12] = 320U;
     m[13] = 0U; m[14] = 0U; m[15] = 0U; m[16] = 0U; m[17] = 0U;
     m[18] = 0U; m[19] = 0U;
     __DSB();
@@ -684,21 +681,21 @@ static void run_touch_diagnostic(void)
                 last_y = raw_to_y(y);
                 lcd_fill_rect((uint16_t)(last_x > 3U ? last_x-3U : 0U),
                               (uint16_t)(last_y > 3U ? last_y-3U : 0U),
-                              (uint16_t)(last_x < 316U ? last_x+3U : 319U),
-                              (uint16_t)(last_y < 476U ? last_y+3U : 479U),
+                              (uint16_t)(last_x < 476U ? last_x+3U : 479U),
+                              (uint16_t)(last_y < 316U ? last_y+3U : 319U),
                               0x07E0U);
             }
 
             /* Live X/Y/Z1 bars update even if PENIRQ wiring is faulty. */
-            lcd_fill_rect(24U, 427U, 296U, 431U, 0x2104U);
-            lcd_fill_rect(24U, 427U,
-                (uint16_t)(24U + ((uint32_t)x * 272U / 4095U)), 431U, 0x07E0U);
-            lcd_fill_rect(24U, 440U, 296U, 444U, 0x2104U);
-            lcd_fill_rect(24U, 440U,
-                (uint16_t)(24U + ((uint32_t)y * 272U / 4095U)), 444U, 0x07FFU);
-            lcd_fill_rect(24U, 452U, 296U, 456U, 0x2104U);
-            lcd_fill_rect(24U, 452U,
-                (uint16_t)(24U + ((uint32_t)z1 * 272U / 4095U)), 456U, 0xFFE0U);
+            lcd_fill_rect(24U, 276U, 456U, 279U, 0x2104U);
+            lcd_fill_rect(24U, 276U,
+                (uint16_t)(24U + ((uint32_t)x * 432U / 4095U)), 279U, 0x07E0U);
+            lcd_fill_rect(24U, 289U, 456U, 292U, 0x2104U);
+            lcd_fill_rect(24U, 289U,
+                (uint16_t)(24U + ((uint32_t)y * 432U / 4095U)), 292U, 0x07FFU);
+            lcd_fill_rect(24U, 302U, 456U, 305U, 0x2104U);
+            lcd_fill_rect(24U, 302U,
+                (uint16_t)(24U + ((uint32_t)z1 * 432U / 4095U)), 305U, 0xFFE0U);
         }
         __WFI();
     }
