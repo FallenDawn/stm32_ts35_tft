@@ -51,7 +51,12 @@ void SystemInit(void)
     __ISB();
 }
 
-void SysTick_Handler(void) { ++g_ms; }
+void SysTick_Handler(void)
+{
+    ++g_ms;
+    /* SWD heartbeat: proves whether SysTick still runs if main stalls. */
+    ((volatile uint32_t *)0x2001F000UL)[19] = g_ms;
+}
 
 static void delay_ms(uint32_t ms)
 {
@@ -723,13 +728,15 @@ static void run_touch_diagnostic(void)
     for (;;) {
         if ((uint32_t)(g_ms - last_sample) >= 25U) {
             last_sample = g_ms;
+            m[18] = 0x10U; /* entered sample cycle */
 
             /* Poll ADC continuously, even when PENIRQ is not asserted.
              * This separates a bad PENIRQ wire/polarity from an SPI failure. */
-            x  = touch_read_adc(0xD0U); /* X */
-            y  = touch_read_adc(0x90U); /* Y */
-            z1 = touch_read_adc(0xB0U); /* pressure Z1 */
-            z2 = touch_read_adc(0xC0U); /* pressure Z2 */
+            m[18] = 0x20U; x  = touch_read_adc(0xD0U); /* X */
+            m[18] = 0x21U; y  = touch_read_adc(0x90U); /* Y */
+            m[18] = 0x22U; z1 = touch_read_adc(0xB0U); /* pressure Z1 */
+            m[18] = 0x23U; z2 = touch_read_adc(0xC0U); /* pressure Z2 */
+            m[18] = 0x24U;
             pressed = (uint8_t)(touch_is_pressed() ||
                                 (z1 > 40U && z2 < 4000U));
 
@@ -738,11 +745,12 @@ static void run_touch_diagnostic(void)
             m[15] = (GPIOB->IDR >> 5U) & 1U; /* PB5/SCK level */
             m[16] = (GPIOB->IDR >> 6U) & 1U; /* PB6/MOSI level */
             m[17] = (GPIOB->IDR >> 8U) & 1U; /* PB8/CS level */
-            record_touch(x, y, z1, z2, pressed);
+            m[18] = 0x30U; record_touch(x, y, z1, z2, pressed);
 
             if (pressed && !was_pressed) {
                 ++m[8];
-                buzzer_click();
+                m[18] = 0x40U; buzzer_click();
+                m[18] = 0x41U;
 
                 /* Map the XPT2046 panel axes onto landscape LCD coordinates.
                  * The observed bottom-corner taps show the raw axes are swapped:
@@ -754,22 +762,27 @@ static void run_touch_diagnostic(void)
                 if (dot_x > 474U) dot_x = 474U;
                 if (dot_y < 5U) dot_y = 5U;
                 if (dot_y > 314U) dot_y = 314U;
+                m[18] = 0x50U;
                 lcd_fill_rect((uint16_t)(dot_x - 5U), (uint16_t)(dot_y - 5U),
                               (uint16_t)(dot_x + 5U), (uint16_t)(dot_y + 5U),
                               0xFFE0U);
                 dot_started_ms = g_ms;
                 dot_visible = 1U;
+                m[18] = 0x51U;
             } else if (!pressed && was_pressed) {
                 ++m[9];
             }
             was_pressed = pressed;
+            m[18] = 0x70U;
             __DSB();
 
             /* One marker per tap; redraw the clean test pattern after 10 s.
              * This avoids leaving touch trails while making each tap visible. */
             if (dot_visible && (uint32_t)(g_ms - dot_started_ms) >= 10000UL) {
+                m[18] = 0x60U;
                 draw_touch_screen();
                 dot_visible = 0U;
+                m[18] = 0x61U;
             }
         }
         __WFI();
