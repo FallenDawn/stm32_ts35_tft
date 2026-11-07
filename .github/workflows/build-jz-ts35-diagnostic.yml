@@ -84,9 +84,9 @@ jobs:
           name: JZ-TS35-STM32F207-SDIO-DIAGNOSTIC
           if-no-files-found: error
           path: |
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.elf
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.hex
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.bin
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.map
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.symbols.txt
-            .build/jz-ts35-usart3-tx/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.sections.txt
+            .build/jz-ts35-sdio/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.elf
+            .build/jz-ts35-sdio/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.hex
+            .build/jz-ts35-sdio/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.bin
+            .build/jz-ts35-sdio/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.map
+            .build/jz-ts35-sdio/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.symbols.txt
+            .build/jz-ts35-sdio/JZ-TS35-STM32F207-SDIO-DIAGNOSTIC.sections.txt
